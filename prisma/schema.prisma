@@ -45,12 +45,12 @@ model Party {
   parentPhone     String        @map("parent_phone")
   celebrationName String        @map("celebration_name")
   age             Int
-  date            DateTime      @db(Date)
+  date            DateTime      @db.Date
   slot            PartySlot
   packageId       String        @map("package_id")
   estimatedGuests Int           @map("estimated_guests")
   depositReceived Boolean       @default(false) @map("deposit_received")
-  depositAmount   Decimal?      @map("deposit_amount") @db(Decimal(10, 2))
+  depositAmount   Decimal?      @map("deposit_amount") @db.Decimal(10, 2)
   depositMethod   DepositMethod? @map("deposit_method")
   status          PartyStatus   @default(PENDING_DETAILS)
 
@@ -72,8 +72,8 @@ model Party {
 model Package {
   id             String   @id @default(cuid())
   name           String
-  ferialePrice   Decimal  @map("feriale_price") @db(Decimal(10, 2))
-  weekendPrice   Decimal  @map("weekend_price") @db(Decimal(10, 2))
+  ferialePrice   Decimal  @map("feriale_price") @db.Decimal(10, 2)
+  weekendPrice   Decimal  @map("weekend_price") @db.Decimal(10, 2)
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -85,7 +85,7 @@ model Package {
 model AdditionalService {
   id        String   @id @default(cuid())
   name      String
-  price     Decimal  @db(Decimal(10, 2))
+  price     Decimal  @db.Decimal(10, 2)
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

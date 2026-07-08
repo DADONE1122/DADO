@@ -19,20 +19,8 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   const isPending = formData.status === "PENDING_DETAILS"
   const isCancelled = formData.status === "CANCELLED"
 
-  // Check if detail fields are filled
-  const detailFields = {
-    celebrationName: formData.celebrationName,
-    age: formData.age,
-    parentName: formData.parentName,
-    parentPhone: formData.parentPhone,
-    cake: formData.cake,
-    allergies: formData.allergies,
-    decorationTheme: formData.decorationTheme,
-    specialRequests: formData.specialRequests,
-  }
-  const allDetailsFilled = Object.values(detailFields).every(
-    (v) => v !== null && v !== undefined && v !== ""
-  )
+  // Check if required fields are filled (only cake is mandatory for COMPLETE)
+  const cakeIsFilled = formData.cake && formData.cake.trim() !== ""
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }))
@@ -66,8 +54,8 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   }
 
   const handleComplete = async () => {
-    if (!allDetailsFilled) {
-      setError("Compila tutti i dettagli prima di completare la festa")
+    if (!cakeIsFilled) {
+      setError("Il campo 'torta' è obbligatorio per completare la festa")
       return
     }
 
@@ -137,9 +125,9 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
           <div>
             <p className="font-bold text-red-800 text-lg">Dettagli mancanti</p>
             <p className="text-red-700 text-sm">
-              {allDetailsFilled
-                ? "Tutti i dettagli sono stati compilati. Puoi completare la festa."
-                : "Compila tutti i campi nella sezione Dettagli per completare la festa."}
+              {cakeIsFilled
+                ? "Tutti i campi obbligatori sono compilati. Puoi completare la festa."
+                : "Il campo 'torta' è obbligatorio per completare la festa."}
             </p>
           </div>
         </div>
@@ -353,7 +341,10 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
         {/* Detail fields status */}
         <div className="mt-4 p-3 bg-gray-50 rounded-md">
           <p className="text-sm text-gray-600">
-            Stato dettagli: {allDetailsFilled ? "✅ Completati" : `⚠️ ${Object.values(detailFields).filter((v) => !v).length} campi vuoti`}
+            Stato torta: {cakeIsFilled ? "✅ Inserita" : "⚠️ Campo obbligatorio mancante"}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Solo il campo "torta" è obbligatorio per completare. Allergie, tema e richieste sono opzionali.
           </p>
         </div>
       </section>
@@ -368,7 +359,7 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
           {saving ? "Salvataggio..." : "Salva modifiche"}
         </button>
 
-        {isPending && allDetailsFilled && (
+        {isPending && cakeIsFilled && (
           <button
             type="button"
             onClick={handleComplete}

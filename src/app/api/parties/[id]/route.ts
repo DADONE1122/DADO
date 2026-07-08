@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getSession } from "@/lib/auth-helpers"
+import { checkSlotCapacity } from "@/lib/slot-capacity"
 
 // GET /api/parties/[id]
 export async function GET(
@@ -48,6 +49,27 @@ export async function PUT(
     return NextResponse.json({ error: "Festa non trovata" }, { status: 404 })
   }
 
+  // Check if date or slot is changing — if so, verify capacity on the new slot
+  const newDate = body.date !== undefined ? new Date(body.date) : party.date
+  const newSlot = body.slot !== undefined ? body.slot : party.slot
+  const dateChanged = body.date !== undefined
+  const slotChanged = body.slot !== undefined
+
+  if (dateChanged || slotChanged) {
+    try {
+      // Check slot capacity excluding this party itself
+      await checkSlotCapacity(newDate, newSlot as string, params.id)
+    } catch (error: any) {
+      if (error.message === "Slot al completo per questa data") {
+        return NextResponse.json(
+          { error: "Slot al completo per questa data" },
+          { status: 409 }
+        )
+      }
+      throw error
+    }
+  }
+
   // Build update data
   const updateData: any = {}
 
@@ -70,32 +92,17 @@ export async function PUT(
   if (body.decorationTheme !== undefined) updateData.decorationTheme = body.decorationTheme
   if (body.specialRequests !== undefined) updateData.specialRequests = body.specialRequests
 
-  // Status transition: check if all detail fields are filled -> allow COMPLETE
-  if (body.status !== undefined) {
-    if (body.status === "COMPLETE") {
-      // Check all detail fields are present
-      const detailFields = {
-        celebrationName: updateData.celebrationName ?? party.celebrationName,
-        age: updateData.age ?? party.age,
-        parentName: updateData.parentName ?? party.parentName,
-        parentPhone: updateData.parentPhone ?? party.parentPhone,
-        cake: updateData.cake ?? party.cake,
-        allergies: updateData.allergies ?? party.allergies,
-        decorationTheme: updateData.decorationTheme ?? party.decorationTheme,
-        specialRequests: updateData.specialRequests ?? party.specialRequests,
-      }
-
-      const allFilled = Object.values(detailFields).every(
-        (v) => v !== null && v !== undefined && v !== ""
+  // Status transition to COMPLETE: only "cake" is required
+  if (body.status === "COMPLETE") {
+    const cakeValue = updateData.cake !== undefined ? updateData.cake : party.cake
+    if (!cakeValue || cakeValue.trim() === "") {
+      return NextResponse.json(
+        { error: "Il campo 'torta' è obbligatorio per completare la festa" },
+        { status: 400 }
       )
-
-      if (!allFilled) {
-        return NextResponse.json(
-          { error: "Compila tutti i dettagli prima di completare la festa" },
-          { status: 400 }
-        )
-      }
     }
+    updateData.status = "COMPLETE"
+  } else if (body.status !== undefined) {
     updateData.status = body.status
   }
 

@@ -1,10 +1,10 @@
-import { NextAuthOptions } from "next-auth"
+import NextAuth from "next-auth"
 import EmailProvider from "next-auth/providers/email"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 
-export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as NextAuthOptions["adapter"],
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt",
   },
@@ -21,7 +21,7 @@ export const authOptions: NextAuthOptions = {
             port: 587,
             auth: {
               user: "resend",
-              pass: process.env.AUTH_RESEND_KEY,
+              pass: process.env.AUTH_RESEND_KEY || "",
             },
           },
       from: process.env.EMAIL_FROM || "noreply@pitopitu.it",
@@ -30,8 +30,8 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.role = (user as any).role
+        token.id = user.id ?? ""
+        token.role = (user as any).role ?? ""
       }
       return token
     },
@@ -43,4 +43,4 @@ export const authOptions: NextAuthOptions = {
       return session
     },
   },
-}
+})

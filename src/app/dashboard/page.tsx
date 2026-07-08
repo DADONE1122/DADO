@@ -1,10 +1,9 @@
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   
   if (!session) {
     redirect("/auth/login")
@@ -27,8 +26,11 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4">
         <div className="flex gap-4 mb-6">
+          <a href="/dashboard/feste" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Feste
+          </a>
           <a href="/dashboard/calendario" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-            Calendario Feste
+            Calendario
           </a>
           <a href="/dashboard/nuova-festa" className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
             Nuova Festa

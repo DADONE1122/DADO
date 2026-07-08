@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  STAFF
+}
+
+enum PartySlot {
+  MORNING
+  AFTERNOON
+}
+
+enum PartyStatus {
+  PENDING_DETAILS
+  COMPLETE
+  CANCELLED
+}
+
+enum DepositMethod {
+  CASH
+  BANK_TRANSFER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      Role     @default(STAFF)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Party {
+  id              String        @id @default(cuid())
+  parentName      String        @map("parent_name")
+  parentPhone     String        @map("parent_phone")
+  celebrationName String        @map("celebration_name")
+  age             Int
+  date            DateTime      @db(Date)
+  slot            PartySlot
+  packageId       String        @map("package_id")
+  estimatedGuests Int           @map("estimated_guests")
+  depositReceived Boolean       @default(false) @map("deposit_received")
+  depositAmount   Decimal?      @map("deposit_amount") @db(Decimal(10, 2))
+  depositMethod   DepositMethod? @map("deposit_method")
+  status          PartyStatus   @default(PENDING_DETAILS)
+
+  // Party details group
+  cake             String?
+  allergies        String?
+  decorationTheme  String?  @map("decoration_theme")
+  specialRequests  String?  @map("special_requests")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  package         Package        @relation(fields: [packageId], references: [id])
+  additionalServices PartyService[]
+
+  @@map("parties")
+}
+
+model Package {
+  id             String   @id @default(cuid())
+  name           String
+  ferialePrice   Decimal  @map("feriale_price") @db(Decimal(10, 2))
+  weekendPrice   Decimal  @map("weekend_price") @db(Decimal(10, 2))
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  parties        Party[]
+  @@map("packages")
+}
+
+model AdditionalService {
+  id        String   @id @default(cuid())
+  name      String
+  price     Decimal  @db(Decimal(10, 2))
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  parties  PartyService[]
+  @@map("additional_services")
+}
+
+model PartyService {
+  partyId   String @map("party_id")
+  serviceId String @map("service_id")
+
+  party   Party             @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  service AdditionalService @relation(fields: [serviceId], references: [id])
+
+  @@id([partyId, serviceId])
+  @@map("party_services")
+}
+
+model SlotConfig {
+  id         String    @id @default(cuid())
+  slot       PartySlot @unique
+  startTime  String    @map("start_time") // "HH:mm" format
+  endTime    String    @map("end_time")   // "HH:mm" format
+  maxParties Int       @map("max_parties")
+
+  @@map("slot_configs")
+}

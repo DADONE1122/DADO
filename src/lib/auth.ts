@@ -30,8 +30,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.role = (user as any).role
+        token.id = user.id ?? ""
+        token.role = (user as any).role ?? ""
       }
       return token
     },
@@ -44,10 +44,3 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 })
-
-// Re-export for compatibility with existing code
-export const authOptions = {
-  adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" as const },
-  pages: { signIn: "/auth/login", verifyRequest: "/auth/verify" },
-}

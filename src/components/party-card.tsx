@@ -7,7 +7,7 @@ interface PartyCardProps {
   status: string
 }
 
-export function PartyCard({ celebrationName, parentName, date, slot, status }: PartyCardProps) {
+export function PartyCard({ id, celebrationName, parentName, date, slot, status }: PartyCardProps) {
   const isPending = status === "PENDING_DETAILS"
   const isComplete = status === "COMPLETE"
   const isCancelled = status === "CANCELLED"

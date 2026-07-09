@@ -38,7 +38,7 @@ export default async function DashboardPage() {
           <a href="/dashboard/configurazioni" className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
             Configurazioni
           </a>
-          <a href="/solleciti" className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700">
+          <a href="/dashboard/solleciti" className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700">
             Solleciti
           </a>
         </div>

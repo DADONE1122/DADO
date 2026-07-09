@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPendingParties, buildSollecitiEmailBody } from "@/lib/solleciti"
 import { prisma } from "@/lib/prisma"
-import { resend } from "@/lib/resend"
+import { getResend } from "@/lib/resend"
 
-// POST /api/cron/solleciti
-// Vercel Cron job that runs every morning
+// GET /api/cron/solleciti
+// Vercel Cron job that runs every morning (GET requests)
 // Protected by CRON_SECRET — Vercel Cron sends Authorization: Bearer CRON_SECRET
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
+  // Guard: if CRON_SECRET is not configured, reject immediately
+  if (!process.env.CRON_SECRET) {
+    console.error("CRON_SECRET non configurata — impossibile avviare il cron")
+    return NextResponse.json(
+      { error: "CRON_SECRET non configurata" },
+      { status: 500 }
+    )
+  }
+
   // Verify CRON_SECRET
   const authHeader = request.headers.get("authorization")
   if (!authHeader || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -40,6 +49,9 @@ export async function POST(request: NextRequest) {
 
     const ownerEmails = owners.map((o) => o.email)
     const emailBody = buildSollecitiEmailBody(parties)
+
+    // Lazy-initialize Resend client (only now, not at import time)
+    const resend = getResend()
 
     // Send email via Resend
     const { data, error } = await resend.emails.send({

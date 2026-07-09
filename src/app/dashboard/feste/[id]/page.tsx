@@ -39,13 +39,23 @@ export default async function PartyDetailPage({
 
   return (
     <main className="p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
+      <div className="mb-8 flex items-center justify-between">
         <a
           href="/dashboard/feste"
           className="text-blue-600 hover:text-blue-800 text-sm"
         >
           ← Torna alle feste
         </a>
+
+        {party.depositMethod === "BANK_TRANSFER" && party.depositReceived && (
+          <a
+            href={`/api/parties/${party.id}/invito`}
+            target="_blank"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+          >
+            🎟️ Scarica invito
+          </a>
+        )}
       </div>
 
       <PartyForm

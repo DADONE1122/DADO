@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth-helpers"
+import { checkSlotCapacity } from "@/lib/slot-capacity"
 
 // GET /api/parties?date=YYYY-MM-DD&slot=MORNING|AFTERNOON
 export async function GET(request: NextRequest) {
@@ -54,41 +55,12 @@ export async function POST(request: NextRequest) {
   }
 
   const partyDate = new Date(date)
-  const slotKey = `${partyDate.toISOString().split("T")[0]}-${slot}`
-
-  // Use PostgreSQL advisory lock for race condition prevention
-  // Hash the slotKey to a bigint for pg_advisory_xact_lock
-  const lockId = hashStringToBigInt(slotKey)
 
   try {
-    // Execute in transaction with advisory lock
+    // Single transaction: check capacity (with advisory lock) + create party
     const result = await prisma.$transaction(async (tx) => {
-      // Acquire advisory lock (xact lock auto-releases on commit/rollback)
-      await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${lockId})`)
+      await checkSlotCapacity(tx, partyDate, slot)
 
-      // Get slot config
-      const slotConfig = await tx.slotConfig.findUnique({
-        where: { slot: slot as any },
-      })
-
-      if (!slotConfig) {
-        throw new Error("Configurazione slot non trovata")
-      }
-
-      // Count existing non-CANCELLED parties for this date and slot
-      const existingCount = await tx.party.count({
-        where: {
-          date: partyDate,
-          slot: slot as any,
-          status: { not: "CANCELLED" },
-        },
-      })
-
-      if (existingCount >= slotConfig.maxParties) {
-        throw new Error("Slot al completo per questa data")
-      }
-
-      // Create the party
       const party = await tx.party.create({
         data: {
           parentName: body.parentName,
@@ -138,15 +110,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-function hashStringToBigInt(str: string): bigint {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash = hash & hash // Convert to 32bit integer
-  }
-  // Convert to positive bigint
-  return BigInt(Math.abs(hash))
 }

@@ -30,47 +30,8 @@ export async function GET(
   return NextResponse.json(party)
 }
 
-// PUT /api/parties/[id]
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const session = await getSession()
-  if (!session || session.user?.role !== "OWNER") {
-    return NextResponse.json({ error: "Accesso negato" }, { status: 403 })
-  }
-
-  const body = await request.json()
-  const party = await prisma.party.findUnique({
-    where: { id: params.id },
-  })
-
-  if (!party) {
-    return NextResponse.json({ error: "Festa non trovata" }, { status: 404 })
-  }
-
-  // Check if date or slot is changing — if so, verify capacity on the new slot
-  const newDate = body.date !== undefined ? new Date(body.date) : party.date
-  const newSlot = body.slot !== undefined ? body.slot : party.slot
-  const dateChanged = body.date !== undefined
-  const slotChanged = body.slot !== undefined
-
-  if (dateChanged || slotChanged) {
-    try {
-      // Check slot capacity excluding this party itself
-      await checkSlotCapacity(newDate, newSlot as string, params.id)
-    } catch (error: any) {
-      if (error.message === "Slot al completo per questa data") {
-        return NextResponse.json(
-          { error: "Slot al completo per questa data" },
-          { status: 409 }
-        )
-      }
-      throw error
-    }
-  }
-
-  // Build update data
+// Build update data object from request body and existing party
+function buildUpdateData(body: any, party: any) {
   const updateData: any = {}
 
   // Blocco data fields
@@ -96,24 +57,98 @@ export async function PUT(
   if (body.status === "COMPLETE") {
     const cakeValue = updateData.cake !== undefined ? updateData.cake : party.cake
     if (!cakeValue || cakeValue.trim() === "") {
-      return NextResponse.json(
-        { error: "Il campo 'torta' è obbligatorio per completare la festa" },
-        { status: 400 }
-      )
+      throw new CakeRequiredError()
     }
     updateData.status = "COMPLETE"
   } else if (body.status !== undefined) {
     updateData.status = body.status
   }
 
+  return updateData
+}
+
+class CakeRequiredError extends Error {
+  constructor() {
+    super("Il campo 'torta' è obbligatorio per completare la festa")
+    this.name = "CakeRequiredError"
+  }
+}
+
+// PUT /api/parties/[id]
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const session = await getSession()
+  if (!session || session.user?.role !== "OWNER") {
+    return NextResponse.json({ error: "Accesso negato" }, { status: 403 })
+  }
+
+  const body = await request.json()
+  const party = await prisma.party.findUnique({
+    where: { id: params.id },
+  })
+
+  if (!party) {
+    return NextResponse.json({ error: "Festa non trovata" }, { status: 404 })
+  }
+
+  // Validate cake requirement before any DB operation
+  try {
+    buildUpdateData(body, party)
+  } catch (error: any) {
+    if (error instanceof CakeRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    throw error
+  }
+
+  // Check if date or slot is changing — if so, verify capacity on the new slot
+  const newDate = body.date !== undefined ? new Date(body.date) : party.date
+  const newSlot = body.slot !== undefined ? body.slot : party.slot
+  const dateChanged = body.date !== undefined
+  const slotChanged = body.slot !== undefined
+
+  if (dateChanged || slotChanged) {
+    // Single transaction: check capacity (with advisory lock) + update party
+    try {
+      const updatedParty = await prisma.$transaction(async (tx) => {
+        await checkSlotCapacity(tx, newDate, newSlot as string, params.id)
+
+        return tx.party.update({
+          where: { id: params.id },
+          data: buildUpdateData(body, party),
+          include: {
+            package: true,
+            additionalServices: { include: { service: true } },
+          },
+        })
+      })
+
+      return NextResponse.json(updatedParty)
+    } catch (error: any) {
+      if (error.message === "Slot al completo per questa data") {
+        return NextResponse.json(
+          { error: "Slot al completo per questa data" },
+          { status: 409 }
+        )
+      }
+      console.error("Error updating party:", error)
+      return NextResponse.json(
+        { error: "Errore durante l'aggiornamento della festa" },
+        { status: 500 }
+      )
+    }
+  }
+
+  // No date/slot change — simple update without transaction
+  const updateData = buildUpdateData(body, party)
   const updatedParty = await prisma.party.update({
     where: { id: params.id },
     data: updateData,
     include: {
       package: true,
-      additionalServices: {
-        include: { service: true },
-      },
+      additionalServices: { include: { service: true } },
     },
   })
 

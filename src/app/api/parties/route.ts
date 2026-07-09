@@ -57,11 +57,10 @@ export async function POST(request: NextRequest) {
   const partyDate = new Date(date)
 
   try {
-    // Check slot capacity with advisory lock (shared function)
-    await checkSlotCapacity(partyDate, slot)
-
-    // Execute in transaction with advisory lock
+    // Single transaction: check capacity (with advisory lock) + create party
     const result = await prisma.$transaction(async (tx) => {
+      await checkSlotCapacity(tx, partyDate, slot)
+
       const party = await tx.party.create({
         data: {
           parentName: body.parentName,

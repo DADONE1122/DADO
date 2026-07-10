@@ -27,6 +27,25 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(packages)
 }
 
+function validatePackage(body: any): string | null {
+  if (!body.name || body.name.trim().length === 0) {
+    return "Il nome è obbligatorio"
+  }
+
+  const ferialePrice = parseFloat(body.ferialePrice)
+  if (isNaN(ferialePrice) || ferialePrice < 0) {
+    return "Il prezzo feriale deve essere un numero >= 0"
+  }
+
+  const weekendPrice = parseFloat(body.weekendPrice)
+  if (isNaN(weekendPrice) || weekendPrice < 0) {
+    return "Il prezzo weekend deve essere un numero >= 0"
+  }
+
+  return null
+}
+
+// POST /api/packages
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session || session.user?.role !== "OWNER") {
@@ -34,9 +53,14 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
+  const error = validatePackage(body)
+  if (error) {
+    return NextResponse.json({ error }, { status: 400 })
+  }
+
   const pkg = await prisma.package.create({
     data: {
-      name: body.name,
+      name: body.name.trim(),
       ferialePrice: parseFloat(body.ferialePrice),
       weekendPrice: parseFloat(body.weekendPrice),
       isActive: body.isActive ?? true,
@@ -46,6 +70,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(pkg, { status: 201 })
 }
 
+// PUT /api/packages
 export async function PUT(request: NextRequest) {
   const session = await getSession()
   if (!session || session.user?.role !== "OWNER") {
@@ -53,12 +78,22 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json()
+
+  if (!body.id) {
+    return NextResponse.json({ error: "ID richiesto" }, { status: 400 })
+  }
+
+  const validationError = validatePackage(body)
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 })
+  }
+
   const pkg = await prisma.package.update({
     where: { id: body.id },
     data: {
-      name: body.name,
-      ferialePrice: body.ferialePrice ? parseFloat(body.ferialePrice) : undefined,
-      weekendPrice: body.weekendPrice ? parseFloat(body.weekendPrice) : undefined,
+      name: body.name.trim(),
+      ferialePrice: parseFloat(body.ferialePrice),
+      weekendPrice: parseFloat(body.weekendPrice),
       isActive: body.isActive,
     },
   })

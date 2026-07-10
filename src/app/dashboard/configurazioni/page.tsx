@@ -377,7 +377,12 @@ function SlotManager() {
       body: JSON.stringify({ id: slot.id, ...form }),
     })
     if (res.ok) {
-      setMessage({ type: "success", text: "Slot aggiornato" })
+      const data = await res.json()
+      if (data.warning) {
+        setMessage({ type: "warning", text: data.warning })
+      } else {
+        setMessage({ type: "success", text: "Slot aggiornato" })
+      }
       setEditing(null)
       load()
     } else {

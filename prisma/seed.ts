@@ -135,6 +135,19 @@ async function main() {
     },
   })
 
+  // Default listino content (fictional)
+  await prisma.listinoContent.upsert({
+    where: { id: 'singleton' },
+    update: {},
+    create: {
+      id: 'singleton',
+      titolo: 'Feste di Compleanno al Pito Pitù',
+      sottotitolo: 'Un&apos;esperienza indimenticabile per i tuoi bambini! Ludoteca, giropizza e tanto divertimento.',
+      note: 'Acconto di 50€ al momento della prenotazione (bonifico). Il saldo va saldato il giorno della festa. Prezzi IVA inclusa. Per cancellazioni entro 7 giorni l\'acconto verrà trattenuto.',
+      numeroWhatsapp: '+39 333 1234567',
+    },
+  })
+
   console.log('✅ Seed completed!')
 }
 

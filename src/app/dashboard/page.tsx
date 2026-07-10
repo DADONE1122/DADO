@@ -41,6 +41,9 @@ export default async function DashboardPage() {
           <a href="/dashboard/solleciti" className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700">
             Solleciti
           </a>
+          <a href="/dashboard/listino" className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
+            Listino
+          </a>
         </div>
 
         <h2 className="text-xl font-semibold mb-4">Feste Recenti</h2>

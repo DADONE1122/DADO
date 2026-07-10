@@ -114,3 +114,15 @@ model SlotConfig {
 
   @@map("slot_configs")
 }
+
+model ListinoContent {
+  id              String   @id @default("singleton") // Singleton: always "singleton"
+  titolo          String
+  sottotitolo     String?
+  note            String?
+  numeroWhatsapp  String   @map("numero_whatsapp")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("listino_content")
+}

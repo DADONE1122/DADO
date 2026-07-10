@@ -2,12 +2,28 @@ import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth-helpers"
 
-// GET /api/packages
-export async function GET() {
+export const dynamic = "force-dynamic"
+
+// GET /api/packages?all=true
+export async function GET(request: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: "Non autenticato" }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const showAll = searchParams.get("all") === "true"
+
+  const where: any = {}
+  if (!showAll) {
+    where.isActive = true
+  }
+
   const packages = await prisma.package.findMany({
-    where: { isActive: true },
+    where,
     orderBy: { name: "asc" },
   })
+
   return NextResponse.json(packages)
 }
 

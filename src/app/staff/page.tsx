@@ -14,6 +14,7 @@ type DayParty = {
   decorationTheme: string | null
   specialRequests: string | null
   status: string
+  services: string[]
 }
 
 type DayInfo = {

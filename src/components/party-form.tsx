@@ -203,13 +203,29 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* Status Banner (solo in modifica) */}
       {isPending && !isNew && (
-        <div className="bg-red-50 border-2 border-red-400 rounded-lg p-4 flex items-center gap-3">
-          <span className="text-2xl">⚠️</span>
+        <div
+          className={`border-2 rounded-lg p-4 flex items-center gap-3 ${
+            cakeIsFilled
+              ? "bg-green-50 border-green-400"
+              : "bg-red-50 border-red-400"
+          }`}
+        >
+          <span className="text-2xl">{cakeIsFilled ? "✅" : "⚠️"}</span>
           <div>
-            <p className="font-bold text-red-800 text-lg">Dettagli mancanti</p>
-            <p className="text-red-700 text-sm">
+            <p
+              className={`font-bold text-lg ${
+                cakeIsFilled ? "text-green-800" : "text-red-800"
+              }`}
+            >
+              {cakeIsFilled ? "Pronta da completare" : "Dettagli mancanti"}
+            </p>
+            <p
+              className={`text-sm ${
+                cakeIsFilled ? "text-green-700" : "text-red-700"
+              }`}
+            >
               {cakeIsFilled
-                ? "Il dolce è stato scelto. Puoi completare la festa."
+                ? "Il dolce è stato scelto. Puoi completare la festa col pulsante verde."
                 : "Scegli il dolce per poter completare la festa."}
             </p>
           </div>

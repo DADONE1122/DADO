@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getSession } from "@/lib/auth-helpers"
 import { ImageResponse } from "@vercel/og"
-import fs from "fs"
-import path from "path"
 
 // ─── Text overlay configuration ─────────────────────────────────────────────
 // All values in percentage of image dimensions (width=1315, height=632)
@@ -82,22 +80,23 @@ export async function GET(
     )
   }
 
-  // Read template image and font as base64 data URIs
-  const templatePath = path.join(process.cwd(), "public", "invito-template.png")
-  const fontPath = path.join(process.cwd(), "public", "fonts", "Caveat-VariableFont_wght.ttf")
+  // Load template image and font over HTTP (public files are not on the
+  // serverless filesystem on Vercel, they must be fetched by URL).
+  const origin = new URL(request.url).origin
 
-  if (!fs.existsSync(templatePath)) {
-    return NextResponse.json({ error: "Template invito non trovato" }, { status: 500 })
-  }
-
-  const templateBuffer = fs.readFileSync(templatePath)
-  const templateBase64 = templateBuffer.toString("base64")
+  const templateArrayBuffer = await fetch(`${origin}/invito-template.png`).then(
+    (r) => r.arrayBuffer()
+  )
+  const templateBase64 = Buffer.from(templateArrayBuffer).toString("base64")
   const templateDataUri = `data:image/png;base64,${templateBase64}`
 
-  // Load font
-  let fontBuffer: Buffer | null = null
-  if (fs.existsSync(fontPath)) {
-    fontBuffer = fs.readFileSync(fontPath)
+  let fontData: ArrayBuffer | null = null
+  try {
+    fontData = await fetch(
+      `${origin}/fonts/Caveat-VariableFont_wght.ttf`
+    ).then((r) => r.arrayBuffer())
+  } catch {
+    fontData = null
   }
 
   // Build text positions (percentage → pixels)
@@ -148,11 +147,11 @@ export async function GET(
     {
       width: IMAGE_WIDTH,
       height: IMAGE_HEIGHT,
-      fonts: fontBuffer
+      fonts: fontData
         ? [
             {
               name: "Caveat",
-              data: fontBuffer,
+              data: fontData,
               weight: 700,
               style: "normal",
             },

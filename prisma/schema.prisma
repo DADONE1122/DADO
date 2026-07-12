@@ -114,36 +114,59 @@ model Party {
 }
 
 model Package {
-  id             String   @id @default(cuid())
-  name           String
-  ferialePrice   Decimal  @map("feriale_price") @db.Decimal(10, 2)
-  weekendPrice   Decimal  @map("weekend_price") @db.Decimal(10, 2)
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  name            String
+  ferialePrice    Decimal  @map("feriale_price") @db.Decimal(10, 2)
+  weekendPrice    Decimal  @map("weekend_price") @db.Decimal(10, 2)
+  description     String?
+  inclusions      String?  // elenco incluso nel prezzo, una voce per riga
+  baseGuests      Int      @default(15) @map("base_guests")
+  extraGuestPrice Decimal? @map("extra_guest_price") @db.Decimal(10, 2)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   parties        Party[]
   @@map("packages")
 }
 
 model AdditionalService {
-  id        String   @id @default(cuid())
-  name      String
-  price     Decimal  @db.Decimal(10, 2)
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  name            String
+  price           Decimal  @db.Decimal(10, 2)
+  category        String?  // Cibo, Bevande, Torte e dolci, Allestimenti, Extra
+  priceNote       String?  @map("price_note") // es. "al kg", "min. 20 pezzi", "da concordare"
+  hasOptions      Boolean  @default(false) @map("has_options")
+  exclusivePerDay Boolean  @default(false) @map("exclusive_per_day")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
+  options  ServiceOption[]
   parties  PartyService[]
   @@map("additional_services")
 }
 
+model ServiceOption {
+  id        String   @id @default(cuid())
+  serviceId String   @map("service_id")
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+
+  service       AdditionalService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  partyServices PartyService[]
+
+  @@map("service_options")
+}
+
 model PartyService {
-  partyId   String @map("party_id")
-  serviceId String @map("service_id")
+  partyId   String  @map("party_id")
+  serviceId String  @map("service_id")
+  optionId  String? @map("option_id")
 
   party   Party             @relation(fields: [partyId], references: [id], onDelete: Cascade)
   service AdditionalService @relation(fields: [serviceId], references: [id])
+  option  ServiceOption?    @relation(fields: [optionId], references: [id])
 
   @@id([partyId, serviceId])
   @@map("party_services")

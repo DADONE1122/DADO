@@ -18,7 +18,8 @@ export default async function NuovaFestaPage() {
 
   const services = await prisma.additionalService.findMany({
     where: { isActive: true },
-    orderBy: { name: "asc" },
+    orderBy: [{ category: "asc" }, { name: "asc" }],
+    include: { options: { where: { isActive: true }, orderBy: { name: "asc" } } },
   })
 
   // Festa vuota di partenza (nessun id => modalità creazione)

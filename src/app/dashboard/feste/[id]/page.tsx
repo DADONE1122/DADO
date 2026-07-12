@@ -18,7 +18,7 @@ export default async function PartyDetailPage({
     include: {
       package: true,
       additionalServices: {
-        include: { service: true },
+        include: { service: true, option: true },
       },
     },
   })
@@ -34,7 +34,8 @@ export default async function PartyDetailPage({
 
   const services = await prisma.additionalService.findMany({
     where: { isActive: true },
-    orderBy: { name: "asc" },
+    orderBy: [{ category: "asc" }, { name: "asc" }],
+    include: { options: { where: { isActive: true }, orderBy: { name: "asc" } } },
   })
 
   return (

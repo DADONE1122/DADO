@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 interface PartyFormProps {
@@ -39,6 +39,8 @@ function parseDolce(cake: string | null | undefined) {
 
 const GUESTS_OPTIONS = Array.from({ length: 26 }, (_, i) => i + 5) // 5..30
 
+type Selection = { serviceId: string; optionId: string | null }
+
 export function PartyForm({ party, packages, services }: PartyFormProps) {
   const router = useRouter()
   const initialDolce = parseDolce(party?.cake)
@@ -46,13 +48,17 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   const [formData, setFormData] = useState({ ...party })
   const [dolceChoice, setDolceChoice] = useState(initialDolce.choice)
   const [dolceDetails, setDolceDetails] = useState(initialDolce.details)
-  const [serviceIds, setServiceIds] = useState<string[]>(
+  const [selections, setSelections] = useState<Selection[]>(
     Array.isArray(party?.additionalServices)
       ? party.additionalServices
-          .map((s: any) => s.serviceId ?? s.service?.id)
-          .filter(Boolean)
+          .map((s: any) => ({
+            serviceId: s.serviceId ?? s.service?.id,
+            optionId: s.optionId ?? s.option?.id ?? null,
+          }))
+          .filter((s: any) => s.serviceId)
       : []
   )
+  const [takenOptionIds, setTakenOptionIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
@@ -69,6 +75,28 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
     : ""
   const cakeIsFilled = cakeValue !== ""
 
+  const selectedPackage = packages.find(
+    (p: any) => p.id === formData.packageId
+  )
+
+  // Disponibilità opzioni esclusive (es. sfondi) per la data scelta
+  useEffect(() => {
+    const dateStr = formData.date
+      ? new Date(formData.date).toISOString().split("T")[0]
+      : ""
+    if (!dateStr) {
+      setTakenOptionIds([])
+      return
+    }
+    const params = new URLSearchParams({ date: dateStr })
+    if (party?.id) params.set("excludePartyId", party.id)
+    fetch(`/api/parties/options-availability?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : { takenOptionIds: [] }))
+      .then((d) => setTakenOptionIds(d.takenOptionIds || []))
+      .catch(() => setTakenOptionIds([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.date])
+
   const handleChange = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }))
   }
@@ -76,15 +104,50 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   const buildPayload = (extra: any = {}) => ({
     ...formData,
     cake: cakeValue,
-    serviceIds,
+    serviceSelections: selections,
     ...extra,
   })
 
-  const toggleService = (id: string) => {
-    setServiceIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+  const isChecked = (serviceId: string) =>
+    selections.some((s) => s.serviceId === serviceId)
+
+  const getOptionId = (serviceId: string) =>
+    selections.find((s) => s.serviceId === serviceId)?.optionId ?? ""
+
+  const toggleService = (serviceId: string) => {
+    setSelections((prev) =>
+      prev.some((s) => s.serviceId === serviceId)
+        ? prev.filter((s) => s.serviceId !== serviceId)
+        : [...prev, { serviceId, optionId: null }]
     )
   }
+
+  const setServiceOption = (serviceId: string, optionId: string) => {
+    setSelections((prev) =>
+      prev.map((s) =>
+        s.serviceId === serviceId ? { ...s, optionId: optionId || null } : s
+      )
+    )
+  }
+
+  // Raggruppa i servizi per categoria (ordine fisso, "Altro" in fondo)
+  const CATEGORY_ORDER = [
+    "Cibo",
+    "Bevande",
+    "Torte e dolci",
+    "Allestimenti",
+    "Extra",
+  ]
+  const grouped: Record<string, any[]> = {}
+  for (const svc of services) {
+    const cat = svc.category || "Altro"
+    if (!grouped[cat]) grouped[cat] = []
+    grouped[cat].push(svc)
+  }
+  const orderedCategories = [
+    ...CATEGORY_ORDER.filter((c) => grouped[c]),
+    ...Object.keys(grouped).filter((c) => !CATEGORY_ORDER.includes(c)),
+  ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -297,6 +360,41 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
               ))}
             </select>
           </div>
+
+          {/* Pannello: cosa include il pacchetto scelto */}
+          {selectedPackage && (
+            <div className="md:col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="font-semibold text-gray-800">
+                {selectedPackage.name}
+                {selectedPackage.description && (
+                  <span className="font-normal text-gray-600">
+                    {" "}
+                    — {selectedPackage.description}
+                  </span>
+                )}
+              </p>
+              {selectedPackage.inclusions && (
+                <ul className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-700">
+                  {String(selectedPackage.inclusions)
+                    .split("\n")
+                    .filter(Boolean)
+                    .map((inc: string, i: number) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="text-green-600">✓</span>
+                        <span>{inc}</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+              {selectedPackage.extraGuestPrice && (
+                <p className="mt-2 text-xs text-gray-600">
+                  Base {selectedPackage.baseGuests || 15} bambini — invitato
+                  extra: €{selectedPackage.extraGuestPrice} a bambino
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="md:col-span-2">
             <h3 className="font-semibold text-gray-700 mb-2">Acconto</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -456,21 +554,84 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
             Configurazioni.
           </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {services.map((svc: any) => (
-              <label
-                key={svc.id}
-                className="flex items-center gap-3 p-3 border rounded-md cursor-pointer hover:bg-gray-50"
-              >
-                <input
-                  type="checkbox"
-                  checked={serviceIds.includes(svc.id)}
-                  onChange={() => toggleService(svc.id)}
-                  className="w-4 h-4"
-                />
-                <span className="flex-1">{svc.name}</span>
-                <span className="text-gray-600 font-medium">€{svc.price}</span>
-              </label>
+          <div className="space-y-5">
+            {orderedCategories.map((cat) => (
+              <div key={cat}>
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">
+                  {cat}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {grouped[cat].map((svc: any) => {
+                    const checked = isChecked(svc.id)
+                    const hasOpts =
+                      Array.isArray(svc.options) && svc.options.length > 0
+                    return (
+                      <div
+                        key={svc.id}
+                        className={`border rounded-md p-3 ${
+                          checked ? "border-blue-400 bg-blue-50" : ""
+                        }`}
+                      >
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleService(svc.id)}
+                            className="w-4 h-4"
+                          />
+                          <span className="flex-1">
+                            {svc.name}
+                            {svc.priceNote && (
+                              <span className="text-xs text-gray-500">
+                                {" "}
+                                ({svc.priceNote})
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-gray-700 font-medium whitespace-nowrap">
+                            {Number(svc.price) > 0
+                              ? `€${svc.price}`
+                              : "su preventivo"}
+                          </span>
+                        </label>
+
+                        {checked && hasOpts && (
+                          <div className="mt-2 pl-7">
+                            <select
+                              value={getOptionId(svc.id)}
+                              onChange={(e) =>
+                                setServiceOption(svc.id, e.target.value)
+                              }
+                              className="w-full px-3 py-2 border rounded-md text-sm"
+                            >
+                              <option value="">Scegli...</option>
+                              {svc.options.map((opt: any) => {
+                                const taken = takenOptionIds.includes(opt.id)
+                                return (
+                                  <option
+                                    key={opt.id}
+                                    value={opt.id}
+                                    disabled={taken}
+                                  >
+                                    {opt.name}
+                                    {taken ? " — non disponibile in questa data" : ""}
+                                  </option>
+                                )
+                              })}
+                            </select>
+                            {!formData.date && (
+                              <p className="text-xs text-amber-600 mt-1">
+                                Scegli prima la data per vedere la
+                                disponibilità
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             ))}
           </div>
         )}

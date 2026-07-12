@@ -10,7 +10,7 @@ async function getListino() {
     }),
     prisma.additionalService.findMany({
       where: { isActive: true },
-      orderBy: { name: "asc" },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
     }),
     prisma.listinoContent.findUnique({
       where: { id: "singleton" },
@@ -61,9 +61,12 @@ export default async function HomePage() {
                 className="bg-white rounded-lg border p-4"
                 style={{ borderColor: "#D4C5A9" }}
               >
-                <h4 className="font-bold text-base mb-2" style={{ color: "#2B2B6B" }}>
+                <h4 className="font-bold text-base mb-1" style={{ color: "#2B2B6B" }}>
                   {pkg.name}
                 </h4>
+                {pkg.description && (
+                  <p className="text-xs text-gray-500 mb-2">{pkg.description}</p>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Feriale</span>
                   <span className="font-semibold" style={{ color: "#2B2B6B" }}>
@@ -76,6 +79,21 @@ export default async function HomePage() {
                     {Number(pkg.weekendPrice).toFixed(2)}€
                   </span>
                 </div>
+                {pkg.inclusions && (
+                  <ul className="mt-3 pt-3 border-t space-y-1" style={{ borderColor: "#EFE5D0" }}>
+                    {String(pkg.inclusions).split("\n").filter(Boolean).map((inc, i) => (
+                      <li key={i} className="flex gap-2 text-xs text-gray-600">
+                        <span className="text-green-600">✓</span>
+                        <span>{inc}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {pkg.extraGuestPrice && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Base {pkg.baseGuests || 15} bambini · invitato extra +{Number(pkg.extraGuestPrice).toFixed(2)}€
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -87,19 +105,54 @@ export default async function HomePage() {
             <h3 className="text-lg font-bold mb-3" style={{ color: "#2B2B6B" }}>
               ✨ Servizi Aggiuntivi
             </h3>
-            <div className="space-y-2">
-              {services.map((svc) => (
-                <div
-                  key={svc.id}
-                  className="bg-white rounded-lg border p-3 flex justify-between items-center"
-                  style={{ borderColor: "#D4C5A9" }}
-                >
-                  <span className="text-gray-700 text-sm">{svc.name}</span>
-                  <span className="font-semibold text-sm" style={{ color: "#2B2B6B" }}>
-                    +{Number(svc.price).toFixed(2)}€
-                  </span>
-                </div>
-              ))}
+            <div className="space-y-4">
+              {["Cibo", "Bevande", "Torte e dolci", "Allestimenti", "Extra"]
+                .concat(
+                  Array.from(
+                    new Set(
+                      services
+                        .map((s) => s.category || "Altro")
+                        .filter(
+                          (c) =>
+                            !["Cibo", "Bevande", "Torte e dolci", "Allestimenti", "Extra"].includes(c)
+                        )
+                    )
+                  )
+                )
+                .filter((cat) => services.some((s) => (s.category || "Altro") === cat))
+                .map((cat) => (
+                  <div key={cat}>
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-1.5">
+                      {cat}
+                    </h4>
+                    <div className="space-y-1.5">
+                      {services
+                        .filter((s) => (s.category || "Altro") === cat)
+                        .map((svc) => (
+                          <div
+                            key={svc.id}
+                            className="bg-white rounded-lg border p-3 flex justify-between items-center gap-3"
+                            style={{ borderColor: "#D4C5A9" }}
+                          >
+                            <span className="text-gray-700 text-sm">
+                              {svc.name}
+                              {svc.priceNote && (
+                                <span className="text-xs text-gray-400"> ({svc.priceNote})</span>
+                              )}
+                            </span>
+                            <span
+                              className="font-semibold text-sm whitespace-nowrap"
+                              style={{ color: "#2B2B6B" }}
+                            >
+                              {Number(svc.price) > 0
+                                ? `+${Number(svc.price).toFixed(2)}€`
+                                : "su preventivo"}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ))}
             </div>
           </section>
         )}

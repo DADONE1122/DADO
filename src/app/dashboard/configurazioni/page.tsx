@@ -60,7 +60,8 @@ function PackageManager() {
   const [packages, setPackages] = useState<Package[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: "", ferialePrice: "", weekendPrice: "" })
+  const EMPTY_PKG = { name: "", ferialePrice: "", weekendPrice: "", description: "", inclusions: "", baseGuests: "", extraGuestPrice: "" }
+  const [form, setForm] = useState<any>(EMPTY_PKG)
   const [showNew, setShowNew] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
@@ -82,7 +83,7 @@ function PackageManager() {
     })
     if (res.ok) {
       setMessage({ type: "success", text: id ? "Pacchetto aggiornato" : "Pacchetto creato" })
-      setForm({ name: "", ferialePrice: "", weekendPrice: "" })
+      setForm(EMPTY_PKG)
       setEditing(null)
       setShowNew(false)
       load()
@@ -114,7 +115,7 @@ function PackageManager() {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-semibold">Pacchetti Festa</h2>
         <button
-          onClick={() => { setShowNew(!showNew); setEditing(null); setForm({ name: "", ferialePrice: "", weekendPrice: "" }) }}
+          onClick={() => { setShowNew(!showNew); setEditing(null); setForm(EMPTY_PKG) }}
           className="px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700"
         >
           + Nuovo
@@ -143,7 +144,7 @@ function PackageManager() {
                 />
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => save(pkg.id)} className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Salva</button>
-                  <button onClick={() => { setEditing(null); setForm({ name: "", ferialePrice: "", weekendPrice: "" }) }} className="px-4 py-1.5 bg-gray-200 text-gray-700 rounded text-sm">Annulla</button>
+                  <button onClick={() => { setEditing(null); setForm(EMPTY_PKG) }} className="px-4 py-1.5 bg-gray-200 text-gray-700 rounded text-sm">Annulla</button>
                 </div>
               </>
             ) : (
@@ -159,7 +160,7 @@ function PackageManager() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setEditing(pkg.id); setForm({ name: pkg.name, ferialePrice: String(pkg.ferialePrice), weekendPrice: String(pkg.weekendPrice) }) }}
+                    onClick={() => { setEditing(pkg.id); setForm({ name: pkg.name, ferialePrice: String(pkg.ferialePrice), weekendPrice: String(pkg.weekendPrice), description: (pkg as any).description || "", inclusions: (pkg as any).inclusions || "", baseGuests: (pkg as any).baseGuests ? String((pkg as any).baseGuests) : "", extraGuestPrice: (pkg as any).extraGuestPrice ? String((pkg as any).extraGuestPrice) : "" }) }}
                     className="text-sm text-blue-600 hover:text-blue-800"
                   >
                     Modifica
@@ -217,6 +218,49 @@ function PackageForm({ form, setForm }: { form: any; setForm: any }) {
           required
         />
       </div>
+      <div className="sm:col-span-3">
+        <label className="block text-xs font-medium text-gray-700 mb-1">Descrizione breve</label>
+        <input
+          type="text"
+          value={form.description || ""}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          className="w-full px-2 py-1.5 border rounded text-sm"
+          placeholder="Es. La festa completa: pensiamo a tutto noi."
+        />
+      </div>
+      <div className="sm:col-span-3">
+        <label className="block text-xs font-medium text-gray-700 mb-1">Cosa include (una voce per riga — appare nel listino e in prenotazione)</label>
+        <textarea
+          rows={5}
+          value={form.inclusions || ""}
+          onChange={(e) => setForm({ ...form, inclusions: e.target.value })}
+          className="w-full px-2 py-1.5 border rounded text-sm"
+          placeholder={"1 vassoio pizza 30x40\nBiglietti invito\n..."}
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Bambini inclusi (base)</label>
+        <input
+          type="number"
+          min="1"
+          value={form.baseGuests || ""}
+          onChange={(e) => setForm({ ...form, baseGuests: e.target.value })}
+          className="w-full px-2 py-1.5 border rounded text-sm"
+          placeholder="15"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Prezzo invitato extra (€)</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={form.extraGuestPrice || ""}
+          onChange={(e) => setForm({ ...form, extraGuestPrice: e.target.value })}
+          className="w-full px-2 py-1.5 border rounded text-sm"
+          placeholder="5.00"
+        />
+      </div>
     </div>
   )
 }
@@ -226,7 +270,8 @@ function PackageForm({ form, setForm }: { form: any; setForm: any }) {
 function ServiceManager() {
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: "", price: "" })
+  const EMPTY_SVC = { name: "", price: "", category: "", priceNote: "", optionsText: "", exclusivePerDay: false }
+  const [form, setForm] = useState<any>(EMPTY_SVC)
   const [editing, setEditing] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
@@ -241,7 +286,15 @@ function ServiceManager() {
   useEffect(() => { load() }, [])
 
   const save = async (id?: string) => {
-    const body = id ? { id, ...form } : form
+    const payload: any = {
+      name: form.name,
+      price: form.price,
+      category: form.category,
+      priceNote: form.priceNote,
+      exclusivePerDay: form.exclusivePerDay,
+      options: String(form.optionsText || "").split("\n").map((x: string) => x.trim()).filter(Boolean),
+    }
+    const body = id ? { id, ...payload } : payload
     const res = await fetch("/api/services", {
       method: id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -249,7 +302,7 @@ function ServiceManager() {
     })
     if (res.ok) {
       setMessage({ type: "success", text: id ? "Servizio aggiornato" : "Servizio creato" })
-      setForm({ name: "", price: "" })
+      setForm(EMPTY_SVC)
       setEditing(null)
       setShowNew(false)
       load()
@@ -281,7 +334,7 @@ function ServiceManager() {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-semibold">Servizi Aggiuntivi</h2>
         <button
-          onClick={() => { setShowNew(!showNew); setEditing(null); setForm({ name: "", price: "" }) }}
+          onClick={() => { setShowNew(!showNew); setEditing(null); setForm(EMPTY_SVC) }}
           className="px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700"
         >
           + Nuovo
@@ -297,8 +350,31 @@ function ServiceManager() {
               <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" required />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Prezzo (€)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Prezzo (€) — 0 = su preventivo</label>
               <input type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Categoria</label>
+              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm">
+                <option value="">Altro</option>
+                <option value="Cibo">Cibo</option>
+                <option value="Bevande">Bevande</option>
+                <option value="Torte e dolci">Torte e dolci</option>
+                <option value="Allestimenti">Allestimenti</option>
+                <option value="Extra">Extra</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Nota prezzo (es. "al kg", "min. 20")</label>
+              <input type="text" value={form.priceNote} onChange={(e) => setForm({ ...form, priceNote: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Opzioni tra cui scegliere (una per riga, es. gli sfondi) — vuoto se il servizio non ha opzioni</label>
+              <textarea rows={3} value={form.optionsText} onChange={(e) => setForm({ ...form, optionsText: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" placeholder={"Unicorni\nSupereroi\nPrincipesse"} />
+              <label className="flex items-center gap-2 mt-1 text-xs text-gray-700">
+                <input type="checkbox" checked={form.exclusivePerDay} onChange={(e) => setForm({ ...form, exclusivePerDay: e.target.checked })} className="w-3.5 h-3.5" />
+                Ogni opzione può essere prenotata da UNA sola festa al giorno (es. sfondi fotografici)
+              </label>
             </div>
           </div>
           <div className="flex gap-2 mt-3">
@@ -319,26 +395,52 @@ function ServiceManager() {
                     <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Prezzo (€)</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Prezzo (€) — 0 = su preventivo</label>
                     <input type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Categoria</label>
+                    <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm">
+                      <option value="">Altro</option>
+                      <option value="Cibo">Cibo</option>
+                      <option value="Bevande">Bevande</option>
+                      <option value="Torte e dolci">Torte e dolci</option>
+                      <option value="Allestimenti">Allestimenti</option>
+                      <option value="Extra">Extra</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Nota prezzo</label>
+                    <input type="text" value={form.priceNote} onChange={(e) => setForm({ ...form, priceNote: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Opzioni (una per riga) — vuoto se senza opzioni</label>
+                    <textarea rows={3} value={form.optionsText} onChange={(e) => setForm({ ...form, optionsText: e.target.value })} className="w-full px-2 py-1.5 border rounded text-sm" />
+                    <label className="flex items-center gap-2 mt-1 text-xs text-gray-700">
+                      <input type="checkbox" checked={form.exclusivePerDay} onChange={(e) => setForm({ ...form, exclusivePerDay: e.target.checked })} className="w-3.5 h-3.5" />
+                      Ogni opzione prenotabile da UNA sola festa al giorno
+                    </label>
                   </div>
                 </div>
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => save(svc.id)} className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Salva</button>
-                  <button onClick={() => { setEditing(null); setForm({ name: "", price: "" }) }} className="px-4 py-1.5 bg-gray-200 text-gray-700 rounded text-sm">Annulla</button>
+                  <button onClick={() => { setEditing(null); setForm(EMPTY_SVC) }} className="px-4 py-1.5 bg-gray-200 text-gray-700 rounded text-sm">Annulla</button>
                 </div>
               </>
             ) : (
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="font-medium">{svc.name}</p>
-                  <p className="text-sm text-gray-600">+{Number(svc.price).toFixed(2)}€</p>
+                  <p className="font-medium">{svc.name} {(svc as any).category && <span className="text-xs text-gray-400">· {(svc as any).category}</span>}</p>
+                  <p className="text-sm text-gray-600">{Number(svc.price) > 0 ? `+${Number(svc.price).toFixed(2)}€` : "su preventivo"}{(svc as any).priceNote ? ` (${(svc as any).priceNote})` : ""}</p>
+                  {Array.isArray((svc as any).options) && (svc as any).options.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-0.5">Opzioni: {((svc as any).options as any[]).map((o: any) => o.name).join(", ")}{(svc as any).exclusivePerDay ? " · 1 festa/giorno" : ""}</p>
+                  )}
                   <span className={`text-xs px-2 py-0.5 rounded-full ${svc.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                     {svc.isActive ? "Attivo" : "Disattivato"}
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => { setEditing(svc.id); setForm({ name: svc.name, price: String(svc.price) }) }} className="text-sm text-blue-600 hover:text-blue-800">Modifica</button>
+                  <button onClick={() => { setEditing(svc.id); setForm({ name: svc.name, price: String(svc.price), category: (svc as any).category || "", priceNote: (svc as any).priceNote || "", optionsText: (((svc as any).options || []) as any[]).map((o: any) => o.name).join("\n"), exclusivePerDay: !!(svc as any).exclusivePerDay }) }} className="text-sm text-blue-600 hover:text-blue-800">Modifica</button>
                   <button onClick={() => toggleActive(svc)} className={`text-sm ${svc.isActive ? "text-yellow-600" : "text-green-600"}`}>
                     {svc.isActive ? "Disattiva" : "Attiva"}
                   </button>

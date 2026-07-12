@@ -2,6 +2,11 @@ import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth-helpers"
 import { checkSlotCapacity } from "@/lib/slot-capacity"
+import {
+  normalizeSelections,
+  assertOptionsAvailable,
+  createPartyServices,
+} from "@/lib/service-selections"
 
 // GET /api/parties?date=YYYY-MM-DD&slot=MORNING|AFTERNOON
 export async function GET(request: NextRequest) {
@@ -55,11 +60,13 @@ export async function POST(request: NextRequest) {
   }
 
   const partyDate = new Date(date)
+  const selections = normalizeSelections(body)
 
   try {
     // Single transaction: check capacity (with advisory lock) + create party
     const result = await prisma.$transaction(async (tx) => {
       await checkSlotCapacity(tx, partyDate, slot)
+      await assertOptionsAvailable(tx, selections, partyDate)
 
       const party = await tx.party.create({
         data: {
@@ -83,28 +90,19 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Add additional services if provided
-      if (body.serviceIds && Array.isArray(body.serviceIds)) {
-        for (const serviceId of body.serviceIds) {
-          await tx.partyService.create({
-            data: {
-              partyId: party.id,
-              serviceId,
-            },
-          })
-        }
-      }
+      // Add additional services (with optional per-day exclusive options)
+      await createPartyServices(tx, party.id, selections)
 
       return party
     })
 
     return NextResponse.json(result, { status: 201 })
   } catch (error: any) {
-    if (error.message === "Slot al completo per questa data") {
-      return NextResponse.json(
-        { error: "Slot al completo per questa data" },
-        { status: 409 }
-      )
+    if (
+      error.message === "Slot al completo per questa data" ||
+      error.message?.includes("già prenotata")
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
     }
     console.error("Error creating party:", error)
     return NextResponse.json(

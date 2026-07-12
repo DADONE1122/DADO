@@ -63,6 +63,10 @@ export async function POST(request: NextRequest) {
       name: body.name.trim(),
       ferialePrice: parseFloat(body.ferialePrice),
       weekendPrice: parseFloat(body.weekendPrice),
+      description: body.description?.trim() || null,
+      inclusions: body.inclusions?.trim() || null,
+      baseGuests: body.baseGuests ? parseInt(body.baseGuests) : 15,
+      extraGuestPrice: body.extraGuestPrice ? parseFloat(body.extraGuestPrice) : null,
       isActive: body.isActive ?? true,
     },
   })
@@ -83,18 +87,31 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "ID richiesto" }, { status: 400 })
   }
 
-  const validationError = validatePackage(body)
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 })
+  // Full edit (name/prices present) → validate. Partial update (e.g. only
+  // isActive toggle) → skip full validation and update only provided fields.
+  const isFullEdit =
+    body.name !== undefined ||
+    body.ferialePrice !== undefined ||
+    body.weekendPrice !== undefined
+
+  if (isFullEdit) {
+    const validationError = validatePackage(body)
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 })
+    }
   }
 
   const pkg = await prisma.package.update({
     where: { id: body.id },
     data: {
-      name: body.name.trim(),
-      ferialePrice: parseFloat(body.ferialePrice),
-      weekendPrice: parseFloat(body.weekendPrice),
-      isActive: body.isActive,
+      ...(body.name !== undefined && { name: body.name.trim() }),
+      ...(body.ferialePrice !== undefined && { ferialePrice: parseFloat(body.ferialePrice) }),
+      ...(body.weekendPrice !== undefined && { weekendPrice: parseFloat(body.weekendPrice) }),
+      ...(body.description !== undefined && { description: body.description?.trim() || null }),
+      ...(body.inclusions !== undefined && { inclusions: body.inclusions?.trim() || null }),
+      ...(body.baseGuests !== undefined && { baseGuests: body.baseGuests ? parseInt(body.baseGuests) : 15 }),
+      ...(body.extraGuestPrice !== undefined && { extraGuestPrice: body.extraGuestPrice ? parseFloat(body.extraGuestPrice) : null }),
+      ...(body.isActive !== undefined && { isActive: body.isActive }),
     },
   })
 

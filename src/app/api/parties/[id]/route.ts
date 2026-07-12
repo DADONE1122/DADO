@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getSession } from "@/lib/auth-helpers"
 import { checkSlotCapacity } from "@/lib/slot-capacity"
+import {
+  normalizeSelections,
+  assertOptionsAvailable,
+  replacePartyServices,
+} from "@/lib/service-selections"
 
 // GET /api/parties/[id]
 export async function GET(
@@ -18,7 +23,7 @@ export async function GET(
     include: {
       package: true,
       additionalServices: {
-        include: { service: true },
+        include: { service: true, option: true },
       },
     },
   })
@@ -30,15 +35,11 @@ export async function GET(
   return NextResponse.json(party)
 }
 
-// Build update data object from request body and existing party
-// Replace the additional services linked to a party with the given list of ids
-async function syncPartyServices(partyId: string, serviceIds: any) {
-  if (!Array.isArray(serviceIds)) return
-  await prisma.partyService.deleteMany({ where: { partyId } })
-  for (const serviceId of serviceIds) {
-    if (!serviceId) continue
-    await prisma.partyService.create({ data: { partyId, serviceId } })
-  }
+// Whether the request body carries a services payload at all
+function hasServicesPayload(body: any) {
+  return (
+    Array.isArray(body.serviceSelections) || Array.isArray(body.serviceIds)
+  )
 }
 
 function buildUpdateData(body: any, party: any) {
@@ -119,57 +120,43 @@ export async function PUT(
   const dateChanged = body.date !== undefined
   const slotChanged = body.slot !== undefined
 
-  if (dateChanged || slotChanged) {
-    // Single transaction: check capacity (with advisory lock) + update party
-    try {
-      await prisma.$transaction(async (tx) => {
+  const selections = hasServicesPayload(body) ? normalizeSelections(body) : null
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (dateChanged || slotChanged) {
         await checkSlotCapacity(tx, newDate, newSlot as string, params.id)
-        await tx.party.update({
-          where: { id: params.id },
-          data: buildUpdateData(body, party),
-        })
-      })
-
-      await syncPartyServices(params.id, body.serviceIds)
-
-      const updatedParty = await prisma.party.findUnique({
-        where: { id: params.id },
-        include: {
-          package: true,
-          additionalServices: { include: { service: true } },
-        },
-      })
-
-      return NextResponse.json(updatedParty)
-    } catch (error: any) {
-      if (error.message === "Slot al completo per questa data") {
-        return NextResponse.json(
-          { error: "Slot al completo per questa data" },
-          { status: 409 }
-        )
       }
-      console.error("Error updating party:", error)
-      return NextResponse.json(
-        { error: "Errore durante l'aggiornamento della festa" },
-        { status: 500 }
-      )
+      if (selections) {
+        await assertOptionsAvailable(tx, selections, newDate, params.id)
+      }
+      await tx.party.update({
+        where: { id: params.id },
+        data: buildUpdateData(body, party),
+      })
+      if (selections) {
+        await replacePartyServices(tx, params.id, selections)
+      }
+    })
+  } catch (error: any) {
+    if (
+      error.message === "Slot al completo per questa data" ||
+      error.message?.includes("già prenotata")
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
     }
+    console.error("Error updating party:", error)
+    return NextResponse.json(
+      { error: "Errore durante l'aggiornamento della festa" },
+      { status: 500 }
+    )
   }
-
-  // No date/slot change — simple update without transaction
-  const updateData = buildUpdateData(body, party)
-  await prisma.party.update({
-    where: { id: params.id },
-    data: updateData,
-  })
-
-  await syncPartyServices(params.id, body.serviceIds)
 
   const updatedParty = await prisma.party.findUnique({
     where: { id: params.id },
     include: {
       package: true,
-      additionalServices: { include: { service: true } },
+      additionalServices: { include: { service: true, option: true } },
     },
   })
 

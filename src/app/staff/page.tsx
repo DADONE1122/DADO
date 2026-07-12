@@ -104,6 +104,12 @@ export default async function StaffPage({
     },
     include: {
       package: { select: { name: true } },
+      additionalServices: {
+        include: {
+          service: { select: { name: true } },
+          option: { select: { name: true } },
+        },
+      },
     },
     orderBy: [{ date: "asc" }, { slot: "asc" }],
   })
@@ -123,6 +129,9 @@ export default async function StaffPage({
         decorationTheme: party.decorationTheme,
         specialRequests: party.specialRequests,
         status: party.status,
+        services: party.additionalServices.map((ps: any) =>
+          ps.option ? `${ps.service.name}: ${ps.option.name}` : ps.service.name
+        ),
       })
     }
   }
@@ -226,7 +235,7 @@ function DaySection({ day }: { day: DayInfo }) {
 }
 
 function PartyCard({ party }: { party: DayParty }) {
-  const hasDetails = party.cake || party.allergies || party.decorationTheme || party.specialRequests
+  const hasDetails = party.cake || party.allergies || party.decorationTheme || party.specialRequests || (Array.isArray(party.services) && party.services.length > 0)
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-3 mx-2">
@@ -276,10 +285,13 @@ function PartyCard({ party }: { party: DayParty }) {
             <span className="text-gray-700 font-medium">Allestimento:</span>
             <span className="text-gray-700">{party.decorationTheme}</span>
           </div>
-        ) : (
+        ) : null}
+
+        {Array.isArray(party.services) && party.services.length > 0 && (
           <div className="flex gap-2">
-            <span className="text-gray-400 shrink-0">🎨</span>
-            <span className="text-yellow-600 italic">Allestimento: da confermare</span>
+            <span className="text-gray-400 shrink-0">➕</span>
+            <span className="text-gray-700 font-medium">Servizi:</span>
+            <span className="text-gray-700">{party.services.join(" · ")}</span>
           </div>
         )}
 

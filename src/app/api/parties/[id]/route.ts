@@ -31,6 +31,16 @@ export async function GET(
 }
 
 // Build update data object from request body and existing party
+// Replace the additional services linked to a party with the given list of ids
+async function syncPartyServices(partyId: string, serviceIds: any) {
+  if (!Array.isArray(serviceIds)) return
+  await prisma.partyService.deleteMany({ where: { partyId } })
+  for (const serviceId of serviceIds) {
+    if (!serviceId) continue
+    await prisma.partyService.create({ data: { partyId, serviceId } })
+  }
+}
+
 function buildUpdateData(body: any, party: any) {
   const updateData: any = {}
 
@@ -112,17 +122,22 @@ export async function PUT(
   if (dateChanged || slotChanged) {
     // Single transaction: check capacity (with advisory lock) + update party
     try {
-      const updatedParty = await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx) => {
         await checkSlotCapacity(tx, newDate, newSlot as string, params.id)
-
-        return tx.party.update({
+        await tx.party.update({
           where: { id: params.id },
           data: buildUpdateData(body, party),
-          include: {
-            package: true,
-            additionalServices: { include: { service: true } },
-          },
         })
+      })
+
+      await syncPartyServices(params.id, body.serviceIds)
+
+      const updatedParty = await prisma.party.findUnique({
+        where: { id: params.id },
+        include: {
+          package: true,
+          additionalServices: { include: { service: true } },
+        },
       })
 
       return NextResponse.json(updatedParty)
@@ -143,9 +158,15 @@ export async function PUT(
 
   // No date/slot change — simple update without transaction
   const updateData = buildUpdateData(body, party)
-  const updatedParty = await prisma.party.update({
+  await prisma.party.update({
     where: { id: params.id },
     data: updateData,
+  })
+
+  await syncPartyServices(params.id, body.serviceIds)
+
+  const updatedParty = await prisma.party.findUnique({
+    where: { id: params.id },
     include: {
       package: true,
       additionalServices: { include: { service: true } },

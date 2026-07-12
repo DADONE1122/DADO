@@ -74,6 +74,8 @@ export async function POST(request: NextRequest) {
           depositReceived: body.depositReceived || false,
           depositAmount: body.depositAmount ? parseFloat(body.depositAmount) : null,
           depositMethod: body.depositMethod || null,
+          cake: body.cake || null,
+          specialRequests: body.specialRequests || null,
           status: "PENDING_DETAILS",
         },
         include: {

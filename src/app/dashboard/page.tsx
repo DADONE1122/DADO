@@ -29,9 +29,6 @@ export default async function DashboardPage() {
           <a href="/dashboard/feste" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
             Feste
           </a>
-          <a href="/dashboard/calendario" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-            Calendario
-          </a>
           <a href="/dashboard/nuova-festa" className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
             Nuova Festa
           </a>
@@ -61,7 +58,11 @@ export default async function DashboardPage() {
             <tbody>
               {recentParties.map((party) => (
                 <tr key={party.id} className="hover:bg-gray-50">
-                  <td className="p-2 border">{party.celebrationName}</td>
+                  <td className="p-2 border">
+                    <a href={`/dashboard/feste/${party.id}`} className="text-blue-600 hover:underline font-medium">
+                      {party.celebrationName}
+                    </a>
+                  </td>
                   <td className="p-2 border">{party.parentName}</td>
                   <td className="p-2 border">{party.date.toLocaleDateString("it-IT")}</td>
                   <td className="p-2 border">{party.slot === "MORNING" ? "Mattina" : "Pomeriggio"}</td>

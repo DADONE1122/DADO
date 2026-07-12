@@ -51,6 +51,39 @@ function getSlotStartTime(slot: string): string {
   return slot === "MORNING" ? "11:00" : "15:30"
 }
 
+// ─── Cached assets (survive warm serverless invocations) ────────────────────
+let _templateDataUri: string | null = null
+let _fontData: ArrayBuffer | null = null
+
+async function getTemplateDataUri(origin: string): Promise<string> {
+  if (_templateDataUri) return _templateDataUri
+  const buf = await fetch(`${origin}/invito-template.png`).then((r) =>
+    r.arrayBuffer()
+  )
+  _templateDataUri = `data:image/png;base64,${Buffer.from(buf).toString("base64")}`
+  return _templateDataUri
+}
+
+// Fetch a STATIC Caveat font from Google Fonts. The bundled variable font
+// (Caveat-VariableFont) is NOT supported by satori and crashes rendering
+// (parseFvarAxis). The old User-Agent forces Google to serve a TTF.
+async function getFontData(): Promise<ArrayBuffer | null> {
+  if (_fontData) return _fontData
+  try {
+    const css = await fetch(
+      "https://fonts.googleapis.com/css2?family=Caveat:wght@700",
+      { headers: { "User-Agent": "Mozilla/4.0" } }
+    ).then((r) => r.text())
+    const match = css.match(/url\((https:\/\/[^)]+\.ttf)\)/)
+    if (match) {
+      _fontData = await fetch(match[1]).then((r) => r.arrayBuffer())
+    }
+  } catch {
+    _fontData = null
+  }
+  return _fontData
+}
+
 // ─── GET /api/parties/[id]/invito → image/png ──────────────────────────────
 export async function GET(
   request: NextRequest,
@@ -82,30 +115,10 @@ export async function GET(
 
   // Load template image and font over HTTP (public files are not on the
   // serverless filesystem on Vercel, they must be fetched by URL).
+  // Both are cached at module level: warm invocations skip the fetches.
   const origin = new URL(request.url).origin
-
-  const templateArrayBuffer = await fetch(`${origin}/invito-template.png`).then(
-    (r) => r.arrayBuffer()
-  )
-  const templateBase64 = Buffer.from(templateArrayBuffer).toString("base64")
-  const templateDataUri = `data:image/png;base64,${templateBase64}`
-
-  // Fetch a STATIC Caveat font from Google Fonts. The bundled variable font
-  // (Caveat-VariableFont) is NOT supported by satori and crashes rendering
-  // (parseFvarAxis). The old User-Agent forces Google to serve a TTF.
-  let fontData: ArrayBuffer | null = null
-  try {
-    const css = await fetch(
-      "https://fonts.googleapis.com/css2?family=Caveat:wght@700",
-      { headers: { "User-Agent": "Mozilla/4.0" } }
-    ).then((r) => r.text())
-    const match = css.match(/url\((https:\/\/[^)]+\.ttf)\)/)
-    if (match) {
-      fontData = await fetch(match[1]).then((r) => r.arrayBuffer())
-    }
-  } catch {
-    fontData = null
-  }
+  const templateDataUri = await getTemplateDataUri(origin)
+  const fontData = await getFontData()
 
   // Build text positions (percentage → pixels)
   const dateStr = formatDateItalian(party.date)

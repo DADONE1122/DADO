@@ -16,6 +16,7 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
+  const isNew = !party?.id
   const isPending = formData.status === "PENDING_DETAILS"
   const isCancelled = formData.status === "CANCELLED"
 
@@ -33,6 +34,23 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
     setSuccess("")
 
     try {
+      if (isNew) {
+        const res = await fetch(`/api/parties`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        })
+
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.error || "Errore durante la creazione")
+        }
+
+        const created = await res.json()
+        router.push(`/dashboard/feste/${created.id}`)
+        return
+      }
+
       const res = await fetch(`/api/parties/${party.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -119,7 +137,7 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* Status Banner */}
-      {isPending && (
+      {isPending && !isNew && (
         <div className="bg-red-50 border-2 border-red-400 rounded-lg p-4 flex items-center gap-3">
           <span className="text-2xl">⚠️</span>
           <div>
@@ -356,10 +374,10 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
           disabled={saving}
           className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
         >
-          {saving ? "Salvataggio..." : "Salva modifiche"}
+          {saving ? "Salvataggio..." : isNew ? "Crea festa" : "Salva modifiche"}
         </button>
 
-        {isPending && cakeIsFilled && (
+        {!isNew && isPending && cakeIsFilled && (
           <button
             type="button"
             onClick={handleComplete}
@@ -370,7 +388,7 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
           </button>
         )}
 
-        {!isCancelled && (
+        {!isNew && !isCancelled && (
           <button
             type="button"
             onClick={handleCancel}

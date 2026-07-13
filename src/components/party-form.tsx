@@ -15,13 +15,15 @@ const DOLCE_OPTIONS = [
     value: "Panino alla Nutella a forma di numero",
     label: "Panino alla Nutella a forma di numero — €28",
     needsDetails: false,
+    price: 28 as number | null,
   },
   {
     value: "Torta di pasticceria",
     label: "Torta di pasticceria — €35/kg",
     needsDetails: true,
+    price: null as number | null, // al kg, peso da definire
   },
-  { value: "La porto io", label: "La porto io", needsDetails: false },
+  { value: "La porto io", label: "La porto io", needsDetails: false, price: 0 as number | null },
 ]
 
 // Ricava scelta + dettagli dal valore salvato nel campo "cake"
@@ -40,6 +42,24 @@ function parseDolce(cake: string | null | undefined) {
 const GUESTS_OPTIONS = Array.from({ length: 26 }, (_, i) => i + 5) // 5..30
 
 type Selection = { serviceId: string; optionId: string | null }
+
+// ── Helpers WhatsApp ──────────────────────────────────────────────────────────
+function waLink(phone: string, text: string) {
+  let digits = (phone || "").replace(/\D/g, "")
+  if (digits.length === 10 && digits.startsWith("3")) digits = "39" + digits
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
+}
+
+function formatDataIt(dateStr: string) {
+  const d = new Date(dateStr)
+  return d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })
+}
+
+function isWeekendOrHoliday(dateStr: string) {
+  const d = new Date(dateStr)
+  const day = d.getDay()
+  return day === 0 || day === 6 // sab/dom (i festivi infrasettimanali vanno considerati a mano)
+}
 
 export function PartyForm({ party, packages, services }: PartyFormProps) {
   const router = useRouter()
@@ -148,6 +168,42 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
     ...CATEGORY_ORDER.filter((c) => grouped[c]),
     ...Object.keys(grouped).filter((c) => !CATEGORY_ORDER.includes(c)),
   ]
+
+  // ── Riepilogo economico ─────────────────────────────────────────────────────
+  const weekend = formData.date ? isWeekendOrHoliday(formData.date) : false
+  const pkgPrice = selectedPackage
+    ? Number(weekend ? selectedPackage.weekendPrice : selectedPackage.ferialePrice)
+    : 0
+  const baseGuests = selectedPackage?.baseGuests || 15
+  const extraGuestPrice = Number(selectedPackage?.extraGuestPrice || 0)
+  const guests = parseInt(formData.estimatedGuests) || 0
+  const extraGuests = Math.max(0, guests - baseGuests)
+  const extraGuestsTotal = extraGuests * extraGuestPrice
+
+  const selectedServices = selections
+    .map((sel) => {
+      const svc = services.find((x: any) => x.id === sel.serviceId)
+      if (!svc) return null
+      const opt = sel.optionId
+        ? (svc.options || []).find((o: any) => o.id === sel.optionId)
+        : null
+      return { name: svc.name, price: Number(svc.price), option: opt?.name || null }
+    })
+    .filter(Boolean) as { name: string; price: number; option: string | null }[]
+  const servicesTotal = selectedServices.reduce((sum, x) => sum + x.price, 0)
+  const hasQuoteOnly = selectedServices.some((x) => x.price === 0)
+
+  const dolcePrice = selectedDolce?.price ?? null
+  const total = pkgPrice + extraGuestsTotal + servicesTotal + (dolcePrice || 0)
+  const deposit = formData.depositReceived ? Number(formData.depositAmount) || 0 : 0
+  const balance = total - deposit
+  const eur = (n: number) => n.toFixed(2).replace(".", ",") + "€"
+
+  // ── Messaggi WhatsApp precompilati ─────────────────────────────────────────
+  const dateIt = formData.date ? formatDataIt(formData.date) : "…"
+  const oraIt = formData.slot === "MORNING" ? "11:00" : "15:30"
+  const msgSollecito = `Ciao ${formData.parentName || ""}! 😊 Ti scriviamo da Pito Pitù per la festa di ${formData.celebrationName || ""} di ${dateIt}: ci mancano ancora un paio di dettagli (dolce ed eventuali richieste). Quando hai un momento facci sapere, grazie! 🎉`
+  const msgConferma = `Ciao ${formData.parentName || ""}! La festa di ${formData.celebrationName || ""} è confermata per ${dateIt} alle ${oraIt} da Pito Pitù 🎉 Vi aspettiamo in Via Kennedy 28 a Cabiate. A presto!`
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -636,6 +692,119 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
           </div>
         )}
       </section>
+
+      {/* ===== RIEPILOGO ECONOMICO ===== */}
+      {selectedPackage && (
+        <section className="bg-white border rounded-lg p-6">
+          <h2 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">
+            💰 Riepilogo Economico
+          </h2>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">
+                {selectedPackage.name} ({weekend ? "weekend/festivo" : "feriale"})
+              </span>
+              <span className="font-medium">{eur(pkgPrice)}</span>
+            </div>
+            {extraGuests > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">
+                  Invitati extra: {extraGuests} × {eur(extraGuestPrice)} (oltre i {baseGuests})
+                </span>
+                <span className="font-medium">{eur(extraGuestsTotal)}</span>
+              </div>
+            )}
+            {selectedServices.map((x, i) => (
+              <div key={i} className="flex justify-between">
+                <span className="text-gray-600">
+                  {x.name}
+                  {x.option ? `: ${x.option}` : ""}
+                </span>
+                <span className="font-medium">
+                  {x.price > 0 ? eur(x.price) : "su preventivo"}
+                </span>
+              </div>
+            ))}
+            {dolceChoice && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Dolce: {dolceChoice}</span>
+                <span className="font-medium">
+                  {dolcePrice === null ? "€35/kg (peso da definire)" : dolcePrice > 0 ? eur(dolcePrice) : "—"}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between pt-2 mt-2 border-t font-bold text-base" style={{ color: "#2B2B6B" }}>
+              <span>Totale stimato{hasQuoteOnly || dolcePrice === null ? " (parziale)" : ""}</span>
+              <span>{eur(total)}</span>
+            </div>
+            {deposit > 0 && (
+              <>
+                <div className="flex justify-between text-gray-600">
+                  <span>Acconto ricevuto</span>
+                  <span>−{eur(deposit)}</span>
+                </div>
+                <div className="flex justify-between font-bold" style={{ color: "#2B2B6B" }}>
+                  <span>Saldo alla festa</span>
+                  <span>{eur(balance)}</span>
+                </div>
+              </>
+            )}
+            <p className="text-xs text-gray-400 pt-2">
+              Stima indicativa: weekend rilevato dal giorno (sab/dom); festivi infrasettimanali, torta al kg e voci su preventivo da definire a parte.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* ===== CONTATTA IL GENITORE ===== */}
+      {!isNew && formData.parentPhone && (
+        <section className="bg-white border rounded-lg p-6">
+          <h2 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">
+            📱 Contatta {formData.parentName || "il genitore"}
+          </h2>
+          <div className="flex gap-3 flex-wrap">
+            {isPending && (
+              <a
+                href={waLink(formData.parentPhone, msgSollecito)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-2.5 rounded-lg text-white font-medium text-sm hover:opacity-90"
+                style={{ backgroundColor: "#25D366" }}
+              >
+                💬 Sollecita dettagli su WhatsApp
+              </a>
+            )}
+            {formData.status === "COMPLETE" && (
+              <a
+                href={waLink(formData.parentPhone, msgConferma)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-2.5 rounded-lg text-white font-medium text-sm hover:opacity-90"
+                style={{ backgroundColor: "#25D366" }}
+              >
+                💬 Invia conferma su WhatsApp
+              </a>
+            )}
+            <a
+              href={waLink(formData.parentPhone, "")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-5 py-2.5 rounded-lg border font-medium text-sm text-gray-700 hover:bg-gray-50"
+            >
+              💬 Chat libera
+            </a>
+            <a
+              href={`tel:${(formData.parentPhone || "").replace(/\s/g, "")}`}
+              className="px-5 py-2.5 rounded-lg border font-medium text-sm text-gray-700 hover:bg-gray-50"
+            >
+              📞 Chiama
+            </a>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Il messaggio si apre precompilato in WhatsApp: lo puoi modificare prima di inviarlo.
+          </p>
+        </section>
+      )}
 
       {/* Messaggi anche vicino ai pulsanti */}
       <Messages />

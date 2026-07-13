@@ -25,6 +25,7 @@ export default async function DashboardLayout({
   const links = [
     { href: "/dashboard", label: "🏠 Dashboard" },
     { href: "/dashboard/feste", label: "🎉 Feste" },
+    { href: "/dashboard/calendario", label: "📆 Calendario" },
     { href: "/dashboard/nuova-festa", label: "＋ Nuova Festa" },
     { href: "/dashboard/solleciti", label: "🔔 Solleciti" },
     { href: "/dashboard/configurazioni", label: "⚙️ Configurazioni" },

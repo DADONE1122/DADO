@@ -48,7 +48,7 @@ export default async function PartyDetailPage({
           ← Torna alle feste
         </a>
 
-        {party.depositMethod === "BANK_TRANSFER" && party.depositReceived && (
+        {(party.status === "COMPLETE" || (party.depositMethod === "BANK_TRANSFER" && party.depositReceived)) && (
           <a
             href={`/api/parties/${party.id}/invito`}
             target="_blank"

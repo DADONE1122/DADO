@@ -665,6 +665,16 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
           </button>
         )}
 
+        {!isNew && formData.status === "COMPLETE" && (
+          <a
+            href={`/api/parties/${party.id}/invito`}
+            target="_blank"
+            className="px-6 py-2 bg-amber-500 text-white rounded-md hover:bg-amber-600 font-medium"
+          >
+            🎟️ Genera invito
+          </a>
+        )}
+
         {!isNew && !isCancelled && (
           <button
             type="button"

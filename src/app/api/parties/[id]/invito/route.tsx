@@ -7,30 +7,10 @@ import { ImageResponse } from "@vercel/og"
 // All values in percentage of image dimensions (width=1315, height=632)
 // Positions are approximate — adjust after visual testing
 const TEXT_OVERLAYS = {
-  date: {
-    label: "il giorno",
-    x: 31, // left edge of text
-    y: 48, // baseline
-    fontSize: 36,
-  },
-  time: {
-    label: "alle ore",
-    x: 57,
-    y: 48,
-    fontSize: 36,
-  },
-  celebrationName: {
-    label: "Ti aspetto!",
-    x: 50,
-    y: 63,
-    fontSize: 42,
-  },
-  phone: {
-    label: "Confermare al numero:",
-    x: 50,
-    y: 74,
-    fontSize: 28,
-  },
+  date: { label: "il giorno", x: 31.5, y: 48, fontSize: 38 },
+  time: { label: "alle ore", x: 58.5, y: 48, fontSize: 38 },
+  celebrationName: { label: "Ti aspetto!", x: 48, y: 62.5, fontSize: 46 },
+  phone: { label: "Confermare al numero:", x: 52.5, y: 75, fontSize: 32 },
 }
 
 const IMAGE_WIDTH = 1315
@@ -39,10 +19,9 @@ const TEXT_COLOR = "#2B2B6B"
 
 // ─── Helper: format date in Italian ─────────────────────────────────────────
 function formatDateItalian(date: Date): string {
-  return date.toLocaleDateString("it-IT", {
-    day: "numeric",
-    month: "long",
-  })
+  const d = String(date.getDate()).padStart(2, "0")
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  return `${d}/${m}`
 }
 
 // ─── Helper: get slot start time ────────────────────────────────────────────
@@ -105,10 +84,13 @@ export async function GET(
     return NextResponse.json({ error: "Festa non trovata" }, { status: 404 })
   }
 
-  // Only visible when deposit is BANK_TRANSFER and received
-  if (party.depositMethod !== "BANK_TRANSFER" || !party.depositReceived) {
+  // Disponibile quando la festa è confermata (COMPLETE), oppure — regola
+  // storica — quando l'acconto è arrivato via bonifico.
+  const bankOk =
+    party.depositMethod === "BANK_TRANSFER" && party.depositReceived
+  if (party.status !== "COMPLETE" && !bankOk) {
     return NextResponse.json(
-      { error: "Invito disponibile solo per pagamenti con bonifico e acconto ricevuto" },
+      { error: "Invito disponibile dopo la conferma della festa" },
       { status: 400 }
     )
   }

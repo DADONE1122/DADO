@@ -48,13 +48,17 @@ export default function LoginForm() {
           <div className="text-center mb-6">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/draghetto.png"
-              alt="Draghetto Pito Pitù"
-              className="mx-auto mb-2 h-24 w-auto"
+              src="/logo-pitopitu.png"
+              alt="Pitopitù Playground"
+              className="mx-auto mb-1 h-20 w-auto"
             />
-            <h1 className="text-2xl font-bold" style={{ color: "#2B2B6B" }}>
-              Pito Pitù
-            </h1>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/draghetto.png"
+              alt=""
+              aria-hidden="true"
+              className="mx-auto mb-2 h-16 w-auto"
+            />
             <p className="text-sm text-gray-500 mt-1">
               Gestionale Feste di Compleanno
             </p>

@@ -40,8 +40,15 @@ export default async function DashboardLayout({
       >
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center gap-1 overflow-x-auto py-2">
-            <span className="text-white font-bold text-lg mr-3 whitespace-nowrap">
-              🦕 Pito Pitù
+            <span className="flex items-center gap-2 text-white font-bold text-lg mr-3 whitespace-nowrap">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/draghetto.png"
+                alt=""
+                aria-hidden="true"
+                className="h-8 w-auto"
+              />
+              Pito Pitù
             </span>
             {links.map((l) => (
               <a

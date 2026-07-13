@@ -29,13 +29,10 @@ export default async function HomePage() {
         <div className="max-w-lg mx-auto">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/draghetto.png"
-            alt="Draghetto Pito Pitù"
-            className="mx-auto mb-2 h-24 w-auto"
+            src="/logo-pitopitu.png"
+            alt="Pitopitù Playground"
+            className="mx-auto mb-3 h-24 w-auto"
           />
-          <h1 className="text-3xl font-bold mb-2" style={{ color: "#2B2B6B" }}>
-            Pito Pitù
-          </h1>
           <p className="text-gray-600 text-sm">Ludoteca e Giropizza — Cabiate (CO)</p>
         </div>
       </header>

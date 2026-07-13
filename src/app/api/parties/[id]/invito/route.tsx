@@ -6,11 +6,13 @@ import { ImageResponse } from "@vercel/og"
 // ─── Text overlay configuration ─────────────────────────────────────────────
 // All values in percentage of image dimensions (width=1315, height=632)
 // Positions are approximate — adjust after visual testing
+// y = posizione della LINEA (il testo è ancorato in basso e cresce verso l'alto,
+// così cambiando fontSize la distanza lettere-linea resta costante)
 const TEXT_OVERLAYS = {
-  date: { label: "il giorno", x: 31.5, y: 48, fontSize: 38 },
-  time: { label: "alle ore", x: 58.5, y: 48, fontSize: 38 },
-  celebrationName: { label: "Ti aspetto!", x: 48, y: 62.5, fontSize: 46 },
-  phone: { label: "Confermare al numero:", x: 52.5, y: 75, fontSize: 32 },
+  date: { label: "il giorno", x: 31.5, y: 51.6, fontSize: 44 },
+  time: { label: "alle ore", x: 58.5, y: 51.6, fontSize: 44 },
+  celebrationName: { label: "Ti aspetto!", x: 48, y: 66.9, fontSize: 62 },
+  phone: { label: "Confermare al numero:", x: 52.5, y: 78, fontSize: 38 },
 }
 
 const IMAGE_WIDTH = 1315
@@ -114,7 +116,7 @@ export async function GET(
     color: TEXT_COLOR,
     fontFamily: '"Caveat", "Dancing Script", cursive',
     textAlign: "center" as const,
-    transform: "translate(-50%, -50%)",
+    transform: "translate(-50%, -100%)",
     whiteSpace: "nowrap" as const,
     lineHeight: 1.2,
     fontWeight: 700,

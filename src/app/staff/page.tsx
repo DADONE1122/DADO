@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
+import { PrintButton } from "@/components/print-button"
 
 export const dynamic = "force-dynamic"
 
@@ -154,11 +155,14 @@ export default async function StaffPage({
         <div className="max-w-lg mx-auto px-4 py-3">
           <div className="flex items-center justify-between mb-1">
             <h1 className="text-lg font-bold text-gray-900">📋 Pito Pitù</h1>
-            <span className="text-xs text-gray-500">Staff</span>
+            <div className="flex items-center gap-2">
+              <PrintButton />
+              <span className="text-xs text-gray-500">Staff</span>
+            </div>
           </div>
 
           {/* Week navigation */}
-          <div className="flex items-center justify-between mt-1">
+          <div className="flex items-center justify-between mt-1 print:hidden">
             <a
               href={`/staff?week=${prevWeek.toISOString().split("T")[0]}`}
               className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"

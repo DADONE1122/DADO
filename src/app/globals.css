@@ -11,3 +11,21 @@ body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
 }
+/* ── Stampa: foglio giornata staff pulito ── */
+@media print {
+  body {
+    background: white !important;
+  }
+  header {
+    position: static !important;
+    box-shadow: none !important;
+  }
+  a[href] {
+    text-decoration: none !important;
+    color: inherit !important;
+  }
+  .print-break-avoid,
+  [class*="rounded-lg"] {
+    break-inside: avoid;
+  }
+}

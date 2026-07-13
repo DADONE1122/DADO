@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { waLink, msgSollecitoDettagli, msgConfermaFesta } from "@/lib/whatsapp"
+import { isWeekendOFestivo } from "@/lib/festivi"
 
 interface PartyFormProps {
   party: any
@@ -42,24 +44,6 @@ function parseDolce(cake: string | null | undefined) {
 const GUESTS_OPTIONS = Array.from({ length: 26 }, (_, i) => i + 5) // 5..30
 
 type Selection = { serviceId: string; optionId: string | null }
-
-// ── Helpers WhatsApp ──────────────────────────────────────────────────────────
-function waLink(phone: string, text: string) {
-  let digits = (phone || "").replace(/\D/g, "")
-  if (digits.length === 10 && digits.startsWith("3")) digits = "39" + digits
-  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
-}
-
-function formatDataIt(dateStr: string) {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })
-}
-
-function isWeekendOrHoliday(dateStr: string) {
-  const d = new Date(dateStr)
-  const day = d.getDay()
-  return day === 0 || day === 6 // sab/dom (i festivi infrasettimanali vanno considerati a mano)
-}
 
 export function PartyForm({ party, packages, services }: PartyFormProps) {
   const router = useRouter()
@@ -170,7 +154,7 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   ]
 
   // ── Riepilogo economico ─────────────────────────────────────────────────────
-  const weekend = formData.date ? isWeekendOrHoliday(formData.date) : false
+  const weekend = formData.date ? isWeekendOFestivo(formData.date) : false
   const pkgPrice = selectedPackage
     ? Number(weekend ? selectedPackage.weekendPrice : selectedPackage.ferialePrice)
     : 0
@@ -200,10 +184,13 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   const eur = (n: number) => n.toFixed(2).replace(".", ",") + "€"
 
   // ── Messaggi WhatsApp precompilati ─────────────────────────────────────────
-  const dateIt = formData.date ? formatDataIt(formData.date) : "…"
   const oraIt = formData.slot === "MORNING" ? "11:00" : "15:30"
-  const msgSollecito = `Ciao ${formData.parentName || ""}! 😊 Ti scriviamo da Pito Pitù per la festa di ${formData.celebrationName || ""} di ${dateIt}: ci mancano ancora un paio di dettagli (dolce ed eventuali richieste). Quando hai un momento facci sapere, grazie! 🎉`
-  const msgConferma = `Ciao ${formData.parentName || ""}! La festa di ${formData.celebrationName || ""} è confermata per ${dateIt} alle ${oraIt} da Pito Pitù 🎉 Vi aspettiamo in Via Kennedy 28 a Cabiate. A presto!`
+  const msgSollecito = formData.date
+    ? msgSollecitoDettagli(formData.parentName || "", formData.celebrationName || "", formData.date)
+    : ""
+  const msgConferma = formData.date
+    ? msgConfermaFesta(formData.parentName || "", formData.celebrationName || "", formData.date, oraIt)
+    : ""
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -750,7 +737,7 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
               </>
             )}
             <p className="text-xs text-gray-400 pt-2">
-              Stima indicativa: weekend rilevato dal giorno (sab/dom); festivi infrasettimanali, torta al kg e voci su preventivo da definire a parte.
+              Stima indicativa: prezzo weekend applicato a sabati, domeniche e festivi nazionali; torta al kg e voci su preventivo da definire a parte.
             </p>
           </div>
         </section>

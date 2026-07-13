@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { getPendingParties } from "@/lib/solleciti"
+import { waLink, msgSollecitoDettagli } from "@/lib/whatsapp"
 
 export const dynamic = "force-dynamic"
 
@@ -88,12 +89,30 @@ export default async function SollecitiPage() {
                           </span>
                         </td>
                         <td className="p-3 border-b text-center">
-                          <a
-                            href={`/dashboard/feste/${party.id}`}
-                            className="text-blue-600 hover:text-blue-800 underline text-sm"
-                          >
-                            Completa dettagli
-                          </a>
+                          <div className="flex items-center justify-center gap-2 flex-wrap">
+                            <a
+                              href={waLink(
+                                party.parentPhone,
+                                msgSollecitoDettagli(
+                                  party.parentName,
+                                  party.celebrationName,
+                                  party.date
+                                )
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 rounded-lg text-white text-xs font-medium hover:opacity-90 whitespace-nowrap"
+                              style={{ backgroundColor: "#25D366" }}
+                            >
+                              💬 Sollecita
+                            </a>
+                            <a
+                              href={`/dashboard/feste/${party.id}`}
+                              className="text-blue-600 hover:text-blue-800 underline text-sm whitespace-nowrap"
+                            >
+                              Completa
+                            </a>
+                          </div>
                         </td>
                       </tr>
                     ))}

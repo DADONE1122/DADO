@@ -8,11 +8,21 @@ import { ImageResponse } from "@vercel/og"
 // Positions are approximate — adjust after visual testing
 // y = posizione della LINEA (il testo è ancorato in basso e cresce verso l'alto,
 // così cambiando fontSize la distanza lettere-linea resta costante)
-const TEXT_OVERLAYS = {
-  date: { label: "il giorno", x: 31.5, y: 51.6, fontSize: 44 },
-  time: { label: "alle ore", x: 58.5, y: 51.6, fontSize: 44 },
-  celebrationName: { label: "Ti aspetto!", x: 48, y: 66.9, fontSize: 62 },
-  phone: { label: "Confermare al numero:", x: 52.5, y: 78, fontSize: 38 },
+// align: "center" → x è il centro del testo; "left" → x è il bordo sinistro
+type Overlay = {
+  label: string
+  x: number
+  y: number
+  fontSize: number
+  align: "center" | "left"
+}
+const TEXT_OVERLAYS: Record<string, Overlay> = {
+  // Centrati esattamente sulle rispettive righe del template
+  date: { label: "il giorno", x: 32.4, y: 51.6, fontSize: 44, align: "center" as const },
+  time: { label: "alle ore", x: 56.7, y: 51.6, fontSize: 44, align: "center" as const },
+  celebrationName: { label: "Ti aspetto!", x: 48, y: 66.9, fontSize: 74, align: "center" as const },
+  // Telefono ancorato a sinistra, leggermente a destra dei ":" di "Confermare al numero:"
+  phone: { label: "Confermare al numero:", x: 30, y: 78, fontSize: 38, align: "left" as const },
 }
 
 const IMAGE_WIDTH = 1315
@@ -108,15 +118,20 @@ export async function GET(
   const dateStr = formatDateItalian(party.date)
   const timeStr = getSlotStartTime(party.slot)
 
-  const textStyle = (overlay: typeof TEXT_OVERLAYS.date) => ({
+  const textStyle = (overlay: Overlay) => ({
     position: "absolute" as const,
     left: `${(overlay.x / 100) * IMAGE_WIDTH}px`,
     top: `${(overlay.y / 100) * IMAGE_HEIGHT}px`,
     fontSize: overlay.fontSize,
     color: TEXT_COLOR,
     fontFamily: '"Caveat", "Dancing Script", cursive',
-    textAlign: "center" as const,
-    transform: "translate(-50%, -100%)",
+    textAlign: overlay.align,
+    // Ancoraggio verticale in basso (il testo cresce verso l'alto), orizzontale
+    // al centro o a sinistra a seconda di align.
+    transform:
+      overlay.align === "left"
+        ? "translate(0, -100%)"
+        : "translate(-50%, -100%)",
     whiteSpace: "nowrap" as const,
     lineHeight: 1.2,
     fontWeight: 700,

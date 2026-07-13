@@ -63,6 +63,7 @@ function buildUpdateData(body: any, party: any) {
   if (body.allergies !== undefined) updateData.allergies = body.allergies
   if (body.decorationTheme !== undefined) updateData.decorationTheme = body.decorationTheme
   if (body.specialRequests !== undefined) updateData.specialRequests = body.specialRequests
+  if (body.internalNotes !== undefined) updateData.internalNotes = body.internalNotes
 
   // Status transition to COMPLETE: only "cake" is required
   if (body.status === "COMPLETE") {

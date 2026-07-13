@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
           depositMethod: body.depositMethod || null,
           cake: body.cake || null,
           specialRequests: body.specialRequests || null,
+          internalNotes: body.internalNotes || null,
           status: "PENDING_DETAILS",
         },
         include: {

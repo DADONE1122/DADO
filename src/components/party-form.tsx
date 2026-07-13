@@ -583,6 +583,18 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
               placeholder="Altre richieste..."
             />
           </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium mb-1">
+              🔒 Note interne <span className="text-xs text-gray-400 font-normal">(solo titolari — lo staff non le vede)</span>
+            </label>
+            <textarea
+              rows={2}
+              value={formData.internalNotes || ""}
+              onChange={(e) => handleChange("internalNotes", e.target.value)}
+              className="w-full px-3 py-2 border rounded-md bg-yellow-50/50"
+              placeholder="Es. genitore da richiamare, acconto promesso per venerdì, cliente della fidelity..."
+            />
+          </div>
         </div>
       </section>
 

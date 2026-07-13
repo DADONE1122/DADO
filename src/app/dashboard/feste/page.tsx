@@ -1,7 +1,9 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { PartyCard } from "@/components/party-card"
+import { FesteList } from "@/components/feste-list"
+
+export const dynamic = "force-dynamic"
 
 export default async function FestePage() {
   const session = await auth()
@@ -11,69 +13,37 @@ export default async function FestePage() {
 
   const parties = await prisma.party.findMany({
     orderBy: { date: "desc" },
-    include: { package: true },
+    include: { package: { select: { name: true } } },
   })
 
-  const activeParties = parties.filter((p) => p.status !== "CANCELLED")
-  const cancelledParties = parties.filter((p) => p.status === "CANCELLED")
+  const rows = parties.map((p) => ({
+    id: p.id,
+    celebrationName: p.celebrationName,
+    parentName: p.parentName,
+    parentPhone: p.parentPhone,
+    age: p.age,
+    date: p.date.toISOString(),
+    slot: p.slot,
+    status: p.status,
+    packageName: p.package.name,
+  }))
 
   return (
-    <main className="p-8 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Feste</h1>
-          <p className="text-gray-600 mt-1">
-            {activeParties.length} feste attive · {parties.length} totale
-          </p>
-        </div>
+    <main className="p-6 md:p-8 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold" style={{ color: "#2B2B6B" }}>
+          🎉 Feste
+        </h1>
         <a
-          href="/dashboard"
-          className="px-4 py-2 text-sm border rounded-md hover:bg-gray-50"
+          href="/dashboard/nuova-festa"
+          className="px-4 py-2 text-white rounded-lg text-sm font-medium hover:opacity-90"
+          style={{ backgroundColor: "#2B2B6B" }}
         >
-          ← Dashboard
+          ＋ Nuova festa
         </a>
       </div>
 
-      {activeParties.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          Nessuna festa attiva. Crea una nuova festa dal calendario.
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {activeParties.map((party) => (
-          <PartyCard
-            key={party.id}
-            id={party.id}
-            celebrationName={party.celebrationName}
-            parentName={party.parentName}
-            date={party.date.toISOString()}
-            slot={party.slot}
-            status={party.status}
-          />
-        ))}
-      </div>
-
-      {cancelledParties.length > 0 && (
-        <div className="mt-12">
-          <h2 className="text-xl font-semibold text-gray-500 mb-4">
-            Archivio ({cancelledParties.length})
-          </h2>
-          <div className="space-y-3">
-            {cancelledParties.map((party) => (
-              <PartyCard
-                key={party.id}
-                id={party.id}
-                celebrationName={party.celebrationName}
-                parentName={party.parentName}
-                date={party.date.toISOString()}
-                slot={party.slot}
-                status={party.status}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      <FesteList parties={rows} />
     </main>
   )
 }

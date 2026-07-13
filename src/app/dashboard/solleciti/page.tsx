@@ -20,7 +20,7 @@ export default async function SollecitiPage() {
   return (
     <main className="p-8">
       <div className="max-w-5xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2">📋 Solleciti Dettagli Mancanti</h1>
+        <h1 className="text-2xl md:text-3xl font-bold mb-2" style={{ color: "#2B2B6B" }}>🔔 Solleciti</h1>
         <p className="text-gray-600 mb-8">
           Feste con stato &quot;Dettagli mancanti&quot; in programma nei prossimi 5 giorni
         </p>

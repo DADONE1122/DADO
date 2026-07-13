@@ -27,8 +27,14 @@ export default async function HomePage() {
       {/* Hero */}
       <header className="py-8 px-4 text-center border-b" style={{ borderColor: "#D4C5A9" }}>
         <div className="max-w-lg mx-auto">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/draghetto.png"
+            alt="Draghetto Pito Pitù"
+            className="mx-auto mb-2 h-24 w-auto"
+          />
           <h1 className="text-3xl font-bold mb-2" style={{ color: "#2B2B6B" }}>
-            🦕 Pito Pitù
+            Pito Pitù
           </h1>
           <p className="text-gray-600 text-sm">Ludoteca e Giropizza — Cabiate (CO)</p>
         </div>
@@ -188,6 +194,17 @@ export default async function HomePage() {
           </p>
         </footer>
       </main>
+
+      {/* Draghetto in basso a destra, come nel listino cartaceo */}
+      <div className="pointer-events-none fixed bottom-0 right-0 z-0 select-none">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/draghetto.png"
+          alt=""
+          aria-hidden="true"
+          className="h-32 w-auto opacity-90 sm:h-44"
+        />
+      </div>
     </div>
   )
 }

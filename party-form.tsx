@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { waLink, msgSollecitoDettagli, msgConfermaFesta } from "@/lib/whatsapp"
 import { isWeekendOFestivo } from "@/lib/festivi"
+import { unitLabel } from "@/lib/unita"
+import { PREZZO_PANINO_NUTELLA, PREZZO_TORTA_AL_KG } from "@/lib/prezzi"
 
 interface PartyFormProps {
   party: any
@@ -12,38 +14,57 @@ interface PartyFormProps {
 }
 
 // Opzioni dolce. Se needsDetails, mostra un campo per gusto/richieste.
+// I prezzi arrivano da lib/prezzi: li usa anche il server quando congela il
+// prezzo concordato, e se fossero scritti due volte finirebbero per divergere.
 const DOLCE_OPTIONS = [
   {
     value: "Panino alla Nutella a forma di numero",
-    label: "Panino alla Nutella a forma di numero — €28",
+    label: `Panino alla Nutella a forma di numero — €${PREZZO_PANINO_NUTELLA}`,
     needsDetails: false,
-    price: 28 as number | null,
+    price: PREZZO_PANINO_NUTELLA as number | null,
   },
   {
     value: "Torta di pasticceria",
-    label: "Torta di pasticceria — €35/kg",
+    label: `Torta di pasticceria — €${PREZZO_TORTA_AL_KG}/kg`,
     needsDetails: true,
-    price: null as number | null, // al kg, peso da definire
+    price: null as number | null, // al kg: il totale dipende dai kg indicati
+    pricePerKg: PREZZO_TORTA_AL_KG,
   },
   { value: "La porto io", label: "La porto io", needsDetails: false, price: 0 as number | null },
 ]
 
-// Ricava scelta + dettagli dal valore salvato nel campo "cake"
+// Ricava scelta + kg + dettagli dal valore salvato nel campo "cake".
+// Formato salvato: "Torta di pasticceria — 2,5 kg — cioccolato"
 function parseDolce(cake: string | null | undefined) {
   const c = (cake || "").trim()
   for (const opt of DOLCE_OPTIONS) {
-    if (c === opt.value) return { choice: opt.value, details: "" }
+    if (c === opt.value) return { choice: opt.value, details: "", kg: "" }
     if (opt.needsDetails && c.startsWith(opt.value)) {
-      const rest = c.slice(opt.value.length).replace(/^\s*—\s*/, "")
-      return { choice: opt.value, details: rest }
+      let rest = c.slice(opt.value.length).replace(/^\s*—\s*/, "")
+      let kg = ""
+      const mk = rest.match(/^([\d.,]+)\s*kg\s*(?:—\s*)?/i)
+      if (mk) {
+        // Il campo è <input type="number">: vuole il punto come decimale,
+        // altrimenti il browser lo considera vuoto.
+        kg = mk[1].replace(",", ".")
+        rest = rest.slice(mk[0].length)
+      }
+      return { choice: opt.value, details: rest.trim(), kg }
     }
   }
-  return { choice: "", details: "" }
+  return { choice: "", details: "", kg: "" }
 }
 
 const GUESTS_OPTIONS = Array.from({ length: 26 }, (_, i) => i + 5) // 5..30
 
-type Selection = { serviceId: string; optionId: string | null }
+type Selection = {
+  serviceId: string
+  optionId: string | null
+  quantity: number
+  note?: string
+}
+
+const nf = (n: number) => n.toFixed(2).replace(".", ",") + "€"
 
 export function PartyForm({ party, packages, services }: PartyFormProps) {
   const router = useRouter()
@@ -52,12 +73,15 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   const [formData, setFormData] = useState({ ...party })
   const [dolceChoice, setDolceChoice] = useState(initialDolce.choice)
   const [dolceDetails, setDolceDetails] = useState(initialDolce.details)
+  const [dolceKg, setDolceKg] = useState(initialDolce.kg)
   const [selections, setSelections] = useState<Selection[]>(
     Array.isArray(party?.additionalServices)
       ? party.additionalServices
           .map((s: any) => ({
             serviceId: s.serviceId ?? s.service?.id,
             optionId: s.optionId ?? s.option?.id ?? null,
+            quantity: Number(s.quantity ?? 1) || 1,
+            note: s.note ?? "",
           }))
           .filter((s: any) => s.serviceId)
       : []
@@ -72,9 +96,16 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   const isCancelled = formData.status === "CANCELLED"
 
   const selectedDolce = DOLCE_OPTIONS.find((o) => o.value === dolceChoice)
+  const dolceKgNum = parseFloat((dolceKg || "").replace(",", ".")) || 0
   const cakeValue = dolceChoice
-    ? selectedDolce?.needsDetails && dolceDetails.trim()
-      ? `${dolceChoice} — ${dolceDetails.trim()}`
+    ? selectedDolce?.needsDetails
+      ? [
+          dolceChoice,
+          dolceKgNum > 0 ? `${dolceKg.replace(".", ",")} kg` : "",
+          dolceDetails.trim(),
+        ]
+          .filter(Boolean)
+          .join(" — ")
       : dolceChoice
     : ""
   const cakeIsFilled = cakeValue !== ""
@@ -101,6 +132,36 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.date])
 
+  // Spunta da sola la Pulizia finale quando si sceglie FAI DA TE, e la toglie
+  // se si passa a un pacchetto che la include già. Così non ci si dimentica
+  // di addebitarla né la si lascia addosso per sbaglio.
+  useEffect(() => {
+    const obbligatori = services.filter(
+      (s: any) =>
+        s.mandatoryForPackageId && s.mandatoryForPackageId === formData.packageId
+    )
+    const idsObbligatori = obbligatori.map((s: any) => s.id)
+    const idsMandatoriAltrove = services
+      .filter((s: any) => s.mandatoryForPackageId)
+      .map((s: any) => s.id)
+
+    setSelections((prev) => {
+      // via quelli obbligatori per ALTRI pacchetti, dentro quelli di questo
+      let next = prev.filter(
+        (s) =>
+          !idsMandatoriAltrove.includes(s.serviceId) ||
+          idsObbligatori.includes(s.serviceId)
+      )
+      for (const id of idsObbligatori) {
+        if (!next.some((s) => s.serviceId === id)) {
+          next = [...next, { serviceId: id, optionId: null, quantity: 1, note: "" }]
+        }
+      }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.packageId])
+
   const handleChange = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }))
   }
@@ -118,12 +179,32 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   const getOptionId = (serviceId: string) =>
     selections.find((s) => s.serviceId === serviceId)?.optionId ?? ""
 
-  const toggleService = (serviceId: string) => {
+  const getQuantity = (serviceId: string) =>
+    selections.find((s) => s.serviceId === serviceId)?.quantity ?? 1
+
+  const getNote = (serviceId: string) =>
+    selections.find((s) => s.serviceId === serviceId)?.note ?? ""
+
+  const setServiceNote = (serviceId: string, note: string) => {
     setSelections((prev) =>
-      prev.some((s) => s.serviceId === serviceId)
-        ? prev.filter((s) => s.serviceId !== serviceId)
-        : [...prev, { serviceId, optionId: null }]
+      prev.map((s) => (s.serviceId === serviceId ? { ...s, note } : s))
     )
+  }
+
+  const toggleService = (serviceId: string) => {
+    setSelections((prev) => {
+      if (prev.some((s) => s.serviceId === serviceId)) {
+        // Togliendo un servizio padre si tolgono anche le sue voci figlie
+        // (es. deselezionando Pizza famiglia sparisce la Farcitura).
+        const figli = services
+          .filter((s: any) => s.parentServiceId === serviceId)
+          .map((s: any) => s.id)
+        return prev.filter(
+          (s) => s.serviceId !== serviceId && !figli.includes(s.serviceId)
+        )
+      }
+      return [...prev, { serviceId, optionId: null, quantity: 1, note: "" }]
+    })
   }
 
   const setServiceOption = (serviceId: string, optionId: string) => {
@@ -131,6 +212,14 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
       prev.map((s) =>
         s.serviceId === serviceId ? { ...s, optionId: optionId || null } : s
       )
+    )
+  }
+
+  const setServiceQuantity = (serviceId: string, raw: string) => {
+    const n = parseFloat(raw.replace(",", "."))
+    const q = !isFinite(n) || n <= 0 ? 1 : Math.min(Math.round(n * 100) / 100, 999)
+    setSelections((prev) =>
+      prev.map((s) => (s.serviceId === serviceId ? { ...s, quantity: q } : s))
     )
   }
 
@@ -142,8 +231,36 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
     "Allestimenti",
     "Extra",
   ]
+  // ── Regole obbligatorie del listino ────────────────────────────────────────
+  // 1) Servizi obbligatori per il pacchetto scelto (es. Pulizia finale con
+  //    FAI DA TE): vengono spuntati da soli e non si possono togliere.
+  const serviziObbligatori = services.filter(
+    (s: any) => s.mandatoryForPackageId && s.mandatoryForPackageId === formData.packageId
+  )
+  const isObbligatorio = (id: string) =>
+    serviziObbligatori.some((s: any) => s.id === id)
+
+  // 2) Se il dolce lo porta il genitore, va addebitato il diritto di sbarco:
+  //    almeno uno fra "Servizio torta esterna" e "Servizio panino nutella esterno".
+  const dolceEsterno = dolceChoice === "La porto io"
+  const serviziSbarco = services.filter((s: any) => s.requiredIfCakeExternal)
+  const sbarcoScelto = serviziSbarco.some((s: any) =>
+    selections.some((sel) => sel.serviceId === s.id)
+  )
+  const mancaSbarco = dolceEsterno && serviziSbarco.length > 0 && !sbarcoScelto
+
+  // Servizi mostrati accanto al pacchetto (riguardano la festa in sé,
+  // non sono extra da listino): es. Festa condivisa.
+  const serviziPacchetto = services.filter((s: any) => s.showWithPackage)
+
+  // Voci figlie (es. Farcitura sotto Pizza famiglia): non compaiono nella
+  // lista principale, ma rientrate sotto il servizio padre.
+  const figliDi = (id: string) =>
+    services.filter((s: any) => s.parentServiceId === id)
+
   const grouped: Record<string, any[]> = {}
   for (const svc of services) {
+    if (svc.showWithPackage || svc.parentServiceId) continue
     const cat = svc.category || "Altro"
     if (!grouped[cat]) grouped[cat] = []
     grouped[cat].push(svc)
@@ -171,14 +288,68 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
       const opt = sel.optionId
         ? (svc.options || []).find((o: any) => o.id === sel.optionId)
         : null
-      return { name: svc.name, price: Number(svc.price), option: opt?.name || null }
+      const unit: string | null = svc.unit || null
+      const qty = unit ? Number(sel.quantity) || 1 : 1
+      const unitPrice = Number(svc.price)
+      return {
+        name: svc.name,
+        unitPrice,
+        unit,
+        qty,
+        subtotal: unitPrice * qty,
+        option: opt?.name || null,
+        note: (sel.note || "").trim() || null,
+      }
     })
-    .filter(Boolean) as { name: string; price: number; option: string | null }[]
-  const servicesTotal = selectedServices.reduce((sum, x) => sum + x.price, 0)
-  const hasQuoteOnly = selectedServices.some((x) => x.price === 0)
+    .filter(Boolean) as {
+    name: string
+    unitPrice: number
+    unit: string | null
+    qty: number
+    subtotal: number
+    option: string | null
+    note: string | null
+  }[]
+  const servicesTotal = selectedServices.reduce((sum, x) => sum + x.subtotal, 0)
+  const hasQuoteOnly = selectedServices.some((x) => x.unitPrice === 0)
 
-  const dolcePrice = selectedDolce?.price ?? null
-  const total = pkgPrice + extraGuestsTotal + servicesTotal + (dolcePrice || 0)
+  // Dolce: la torta di pasticceria costa €/kg, quindi dipende dai kg indicati.
+  const dolcePrice = selectedDolce?.needsDetails
+    ? dolceKgNum > 0
+      ? (selectedDolce as any).pricePerKg * dolceKgNum
+      : null
+    : selectedDolce?.price ?? null
+
+  // ── Prezzo concordato (congelato) ──────────────────────────────────────────
+  // Se la festa è già stata confermata, il prezzo pattuito col genitore è
+  // salvato sulla festa e NON cambia se ritocchiamo il listino.
+  const prezzoCongelato =
+    party?.totalAmount !== null && party?.totalAmount !== undefined
+      ? Number(party.totalAmount)
+      : null
+  const congelatoIl = party?.pricesFrozenAt ? new Date(party.pricesFrozenAt) : null
+  const righeCongelate: any[] = (party?.priceBreakdown as any)?.righe || []
+
+  // Doppio conteggio: la torta è già nel dolce, se l'utente spunta anche il
+  // servizio "Torta personalizzata" la conta due volte.
+  const tortaInServizi = selectedServices.some((s) => /torta/i.test(s.name))
+  const tortaDoppia = Boolean(selectedDolce?.needsDetails && tortaInServizi)
+
+  // Totale calcolato sul listino di OGGI (stima finché la festa non è confermata)
+  const totaleStimato =
+    Math.round(
+      (pkgPrice + extraGuestsTotal + servicesTotal + (dolcePrice || 0)) * 100
+    ) / 100
+
+  // Se c'è un prezzo concordato, è quello che vale: il saldo si calcola su
+  // quello, non sulla stima del listino corrente.
+  const total = prezzoCongelato !== null ? prezzoCongelato : totaleStimato
+  const scostamento =
+    prezzoCongelato !== null
+      ? Math.round((totaleStimato - prezzoCongelato) * 100) / 100
+      : 0
+  const prezzoDaAggiornare = prezzoCongelato !== null && Math.abs(scostamento) >= 0.01
+
   const deposit = formData.depositReceived ? Number(formData.depositAmount) || 0 : 0
   const balance = total - deposit
   const eur = (n: number) => n.toFixed(2).replace(".", ",") + "€"
@@ -192,8 +363,169 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
     ? msgConfermaFesta(formData.parentName || "", formData.celebrationName || "", formData.date, oraIt)
     : ""
 
+  // Cosa manca per poter salvare. Mostrato in chiaro accanto al pulsante,
+  // così il salvataggio non fallisce mai in silenzio.
+  const campiMancanti: string[] = []
+  if (!formData.date) campiMancanti.push("la data")
+  if (!formData.packageId) campiMancanti.push("il pacchetto")
+  if (!String(formData.estimatedGuests ?? "").trim())
+    campiMancanti.push("il numero di bambini")
+  if (!formData.celebrationName?.trim()) campiMancanti.push("il nome del festeggiato")
+  if (!String(formData.age ?? "").trim()) campiMancanti.push("l'età")
+  if (!formData.parentName?.trim()) campiMancanti.push("il nome del genitore")
+  if (!formData.parentPhone?.trim()) campiMancanti.push("il telefono")
+  const puoSalvare = campiMancanti.length === 0
+
+  // Incoerenze sull'acconto: non bloccano il salvataggio ma vanno segnalate,
+  // altrimenti si perde traccia di soldi già incassati.
+  const accontoIncompleto =
+    Boolean(formData.depositReceived) &&
+    (!String(formData.depositAmount ?? "").trim() || !formData.depositMethod)
+
+  // Scheda di un singolo servizio: casella, quantità, appunto, opzioni e
+  // eventuali voci figlie rientrate (es. Farcitura sotto Pizza famiglia).
+  const SchedaServizio = ({
+    svc,
+    annidato = false,
+  }: {
+    svc: any
+    annidato?: boolean
+  }) => {
+    const checked = isChecked(svc.id)
+    const hasOpts = Array.isArray(svc.options) && svc.options.length > 0
+    const bloccato = isObbligatorio(svc.id)
+    const figli = figliDi(svc.id)
+
+    return (
+      <div
+        className={`border rounded-md p-3 ${
+          checked ? "border-blue-400 bg-blue-50" : ""
+        } ${annidato ? "ml-6 mt-2 bg-white/70" : ""}`}
+      >
+        <label
+          className={`flex items-center gap-3 ${
+            bloccato ? "cursor-default" : "cursor-pointer"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={bloccato}
+            onChange={() => !bloccato && toggleService(svc.id)}
+            className="w-4 h-4"
+          />
+          <span className="flex-1">
+            {svc.name}
+            {svc.priceNote && (
+              <span className="text-xs text-gray-500"> ({svc.priceNote})</span>
+            )}
+            {bloccato && (
+              <span className="ml-1 text-xs font-medium text-amber-700">
+                — obbligatoria
+              </span>
+            )}
+          </span>
+          <span className="text-gray-700 font-medium whitespace-nowrap">
+            {Number(svc.price) > 0 ? `€${svc.price}` : "su preventivo"}
+          </span>
+        </label>
+
+        {/* Quantità per i servizi a unità (al kg, a pezzo, a bottiglia…) */}
+        {checked && svc.unit && (
+          <div className="mt-2 pl-7 flex items-center gap-2 flex-wrap">
+            <label htmlFor={`qty-${svc.id}`} className="text-sm text-gray-600">
+              Quantità
+            </label>
+            <input
+              id={`qty-${svc.id}`}
+              type="number"
+              inputMode="decimal"
+              min={svc.unit === "kg" ? "0.5" : "1"}
+              step={svc.unit === "kg" ? "0.5" : "1"}
+              value={getQuantity(svc.id)}
+              onChange={(e) => setServiceQuantity(svc.id, e.target.value)}
+              className="w-24 px-3 py-2 border rounded-md text-base"
+            />
+            <span className="text-sm text-gray-600">
+              {unitLabel(svc.unit, getQuantity(svc.id))}
+            </span>
+            <span className="ml-auto text-sm font-semibold text-gray-800">
+              = {nf(Number(svc.price) * getQuantity(svc.id))}
+            </span>
+          </div>
+        )}
+
+        {/* Appunto libero (gusto, tema, testo del topper…) */}
+        {checked && svc.needsNote && (
+          <div className="mt-2 pl-7">
+            <label
+              htmlFor={`note-${svc.id}`}
+              className="block text-sm text-gray-600 mb-1"
+            >
+              {svc.noteLabel || "Appunti"}
+            </label>
+            <input
+              id={`note-${svc.id}`}
+              type="text"
+              value={getNote(svc.id)}
+              onChange={(e) => setServiceNote(svc.id, e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-base"
+              placeholder="Scrivi qui..."
+            />
+          </div>
+        )}
+
+        {/* Opzioni a tendina (es. tema dello sfondo fotografico) */}
+        {checked && hasOpts && (
+          <div className="mt-2 pl-7">
+            <select
+              value={getOptionId(svc.id)}
+              onChange={(e) => setServiceOption(svc.id, e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-base"
+            >
+              <option value="">Scegli il tema...</option>
+              {svc.options.map((opt: any) => {
+                const taken = takenOptionIds.includes(opt.id)
+                return (
+                  <option key={opt.id} value={opt.id} disabled={taken}>
+                    {opt.name}
+                    {taken ? " — già preso in questa data" : ""}
+                  </option>
+                )
+              })}
+            </select>
+            {!formData.date && (
+              <p className="text-xs text-amber-600 mt-1">
+                Scegli prima la data per vedere la disponibilità
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Voci figlie: compaiono solo se il padre è selezionato */}
+        {checked &&
+          figli.map((f: any) => (
+            <SchedaServizio key={f.id} svc={f} annidato />
+          ))}
+      </div>
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!puoSalvare) {
+      setError(`Manca ${campiMancanti.join(", ")}.`)
+      // Porta l'utente sul primo campo non compilato invece di lasciarlo
+      // a fissare un pulsante che non fa niente.
+      const primo = document.querySelector<HTMLElement>(
+        "form :invalid, form [data-mancante=true]"
+      )
+      primo?.scrollIntoView({ behavior: "smooth", block: "center" })
+      primo?.focus?.()
+      return
+    }
+
     setSaving(true)
     setError("")
     setSuccess("")
@@ -249,7 +581,32 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
         const data = await res.json()
         throw new Error(data.error || "Errore durante il completamento")
       }
-      setSuccess("Festa completata con successo!")
+      setSuccess("Festa completata: il prezzo concordato è stato bloccato.")
+      router.refresh()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Ri-blocca il prezzo concordato sul totale attuale. Serve quando la festa
+  // cambia dopo la conferma (il genitore aggiunge un servizio, cambia i bambini)
+  // e il prezzo è stato ri-concordato davvero.
+  const handleRefreeze = async () => {
+    setSaving(true)
+    setError("")
+    try {
+      const res = await fetch(`/api/parties/${party.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload({ refreezePrice: true })),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Errore durante l'aggiornamento del prezzo")
+      }
+      setSuccess("Prezzo concordato aggiornato.")
       router.refresh()
     } catch (err: any) {
       setError(err.message)
@@ -306,7 +663,23 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
   )
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form
+      onSubmit={handleSubmit}
+      // Se un campo è invalido per il browser (es. un numero fuori range), il
+      // submit non parte proprio: senza questo l'utente cliccherebbe "Salva"
+      // senza veder succedere nulla. Qui intercettiamo e diciamo cosa non va.
+      onInvalid={(e) => {
+        const el = e.target as HTMLInputElement
+        const etichetta =
+          el.closest("div")?.querySelector("label")?.textContent?.replace("*", "").trim() ||
+          el.name ||
+          "un campo"
+        setError(
+          `Controlla "${etichetta}": ${el.validationMessage || "valore non valido"}`
+        )
+      }}
+      className="space-y-8"
+    >
       {/* Status Banner (solo in modifica) */}
       {isPending && !isNew && (
         <div
@@ -347,8 +720,12 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Data</label>
+            <label htmlFor="date" className="block text-sm font-medium mb-1">
+              Data <span className="text-red-500">*</span>
+            </label>
             <input
+              id="date"
+              name="date"
               type="date"
               value={
                 formData.date
@@ -356,9 +733,32 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
                   : ""
               }
               onChange={(e) => handleChange("date", e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 border rounded-md text-base"
               required
             />
+            {/* Conferma in chiaro che giorno è: evita di prenotare il giorno
+                sbagliato e mostra subito se scatta il prezzo weekend. */}
+            {formData.date && (
+              <p className="mt-1.5 text-sm">
+                <span className="font-medium capitalize" style={{ color: "#2B2B6B" }}>
+                  {new Date(formData.date).toLocaleDateString("it-IT", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </span>
+                <span
+                  className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                    weekend
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {weekend ? "weekend/festivo — tariffa maggiorata" : "feriale"}
+                </span>
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Slot</label>
@@ -372,12 +772,18 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Pacchetto</label>
+            <label htmlFor="packageId" className="block text-sm font-medium mb-1">
+              Pacchetto <span className="text-red-500">*</span>
+            </label>
             <select
-              value={formData.packageId}
+              id="packageId"
+              name="packageId"
+              value={formData.packageId || ""}
               onChange={(e) => handleChange("packageId", e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 border rounded-md text-base"
+              required
             >
+              <option value="">Seleziona il pacchetto...</option>
               {packages.map((pkg: any) => (
                 <option key={pkg.id} value={pkg.id}>
                   {pkg.name} — Feriale: €{pkg.ferialePrice} / Weekend: €
@@ -387,13 +793,19 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Ospiti stimati
+            <label
+              htmlFor="estimatedGuests"
+              className="block text-sm font-medium mb-1"
+            >
+              Bambini attesi <span className="text-red-500">*</span>
             </label>
             <select
+              id="estimatedGuests"
+              name="estimatedGuests"
               value={formData.estimatedGuests || ""}
               onChange={(e) => handleChange("estimatedGuests", e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 border rounded-md text-base"
+              required
             >
               <option value="">Seleziona...</option>
               {GUESTS_OPTIONS.map((n) => (
@@ -403,6 +815,16 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
               ))}
             </select>
           </div>
+
+          {/* Opzioni della festa in sé (es. Festa condivisa): stanno qui e
+              non fra i servizi, perché riguardano com'è fatta la festa. */}
+          {selectedPackage && serviziPacchetto.length > 0 && (
+            <div className="md:col-span-2 space-y-2">
+              {serviziPacchetto.map((svc: any) => (
+                <SchedaServizio key={svc.id} svc={svc} />
+              ))}
+            </div>
+          )}
 
           {/* Pannello: cosa include il pacchetto scelto */}
           {selectedPackage && (
@@ -494,51 +916,67 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="celebrationName" className="block text-sm font-medium mb-1">
               Nome del festeggiato <span className="text-red-500">*</span>
             </label>
             <input
+              id="celebrationName"
+              name="celebrationName"
               type="text"
+              autoComplete="off"
+              autoCapitalize="words"
               value={formData.celebrationName || ""}
               onChange={(e) => handleChange("celebrationName", e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 border rounded-md text-base"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="age" className="block text-sm font-medium mb-1">
               Età <span className="text-red-500">*</span>
             </label>
             <input
+              id="age"
+              name="age"
               type="number"
+              inputMode="numeric"
               value={formData.age || ""}
               onChange={(e) => handleChange("age", e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 border rounded-md text-base"
               required
               min="0"
+              max="18"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="parentName" className="block text-sm font-medium mb-1">
               Nome genitore <span className="text-red-500">*</span>
             </label>
             <input
+              id="parentName"
+              name="parentName"
               type="text"
+              autoComplete="name"
+              autoCapitalize="words"
               value={formData.parentName || ""}
               onChange={(e) => handleChange("parentName", e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 border rounded-md text-base"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="parentPhone" className="block text-sm font-medium mb-1">
               Telefono genitore <span className="text-red-500">*</span>
             </label>
             <input
+              id="parentPhone"
+              name="parentPhone"
               type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               value={formData.parentPhone || ""}
               onChange={(e) => handleChange("parentPhone", e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 border rounded-md text-base"
               required
             />
           </div>
@@ -559,6 +997,30 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
           </div>
           {selectedDolce?.needsDetails && (
             <div>
+              <label htmlFor="dolceKg" className="block text-sm font-medium mb-1">
+                Peso torta (kg) <span className="text-red-500">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="dolceKg"
+                  type="number"
+                  inputMode="decimal"
+                  min="0.5"
+                  step="0.5"
+                  value={dolceKg}
+                  onChange={(e) => setDolceKg(e.target.value)}
+                  className="w-28 px-3 py-2 border rounded-md text-base"
+                  placeholder="2"
+                />
+                <span className="text-sm text-gray-600">
+                  kg × €35 ={" "}
+                  <b>{dolceKgNum > 0 ? nf(35 * dolceKgNum) : "—"}</b>
+                </span>
+              </div>
+            </div>
+          )}
+          {selectedDolce?.needsDetails && (
+            <div>
               <label className="block text-sm font-medium mb-1">
                 Gusto e richieste (torta)
               </label>
@@ -569,6 +1031,18 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
                 className="w-full px-3 py-2 border rounded-md"
                 placeholder="Es. cioccolato, senza glutine, scritta..."
               />
+            </div>
+          )}
+          {/* Dolce portato da casa: va addebitato il diritto di sbarco. */}
+          {mancaSbarco && (
+            <div className="md:col-span-2 bg-amber-50 border-2 border-amber-400 rounded-lg p-3">
+              <p className="text-sm text-amber-900 font-medium">
+                ⚠️ Il dolce lo porta il genitore: spunta nei servizi{" "}
+                {serviziSbarco.map((s: any) => `"${s.name}"`).join(" oppure ")}.
+              </p>
+              <p className="text-xs text-amber-700 mt-1">
+                Senza, il diritto di sbarco non viene addebitato.
+              </p>
             </div>
           )}
           <div className="md:col-span-2">
@@ -616,75 +1090,9 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
                   {cat}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {grouped[cat].map((svc: any) => {
-                    const checked = isChecked(svc.id)
-                    const hasOpts =
-                      Array.isArray(svc.options) && svc.options.length > 0
-                    return (
-                      <div
-                        key={svc.id}
-                        className={`border rounded-md p-3 ${
-                          checked ? "border-blue-400 bg-blue-50" : ""
-                        }`}
-                      >
-                        <label className="flex items-center gap-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleService(svc.id)}
-                            className="w-4 h-4"
-                          />
-                          <span className="flex-1">
-                            {svc.name}
-                            {svc.priceNote && (
-                              <span className="text-xs text-gray-500">
-                                {" "}
-                                ({svc.priceNote})
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-gray-700 font-medium whitespace-nowrap">
-                            {Number(svc.price) > 0
-                              ? `€${svc.price}`
-                              : "su preventivo"}
-                          </span>
-                        </label>
-
-                        {checked && hasOpts && (
-                          <div className="mt-2 pl-7">
-                            <select
-                              value={getOptionId(svc.id)}
-                              onChange={(e) =>
-                                setServiceOption(svc.id, e.target.value)
-                              }
-                              className="w-full px-3 py-2 border rounded-md text-sm"
-                            >
-                              <option value="">Scegli...</option>
-                              {svc.options.map((opt: any) => {
-                                const taken = takenOptionIds.includes(opt.id)
-                                return (
-                                  <option
-                                    key={opt.id}
-                                    value={opt.id}
-                                    disabled={taken}
-                                  >
-                                    {opt.name}
-                                    {taken ? " — non disponibile in questa data" : ""}
-                                  </option>
-                                )
-                              })}
-                            </select>
-                            {!formData.date && (
-                              <p className="text-xs text-amber-600 mt-1">
-                                Scegli prima la data per vedere la
-                                disponibilità
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                  {grouped[cat].map((svc: any) => (
+                    <SchedaServizio key={svc.id} svc={svc} />
+                  ))}
                 </div>
               </div>
             ))}
@@ -699,6 +1107,11 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
             💰 Riepilogo Economico
           </h2>
           <div className="space-y-1.5 text-sm">
+            {prezzoCongelato !== null && (
+              <p className="text-xs text-gray-400 uppercase tracking-wide pb-1">
+                Voci ai prezzi di oggi
+              </p>
+            )}
             <div className="flex justify-between">
               <span className="text-gray-600">
                 {selectedPackage.name} ({weekend ? "weekend/festivo" : "feriale"})
@@ -718,24 +1131,130 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
                 <span className="text-gray-600">
                   {x.name}
                   {x.option ? `: ${x.option}` : ""}
+                  {x.note && (
+                    <span className="text-gray-500"> ({x.note})</span>
+                  )}
+                  {x.unit && (
+                    <span className="text-gray-500">
+                      {" "}
+                      — {String(x.qty).replace(".", ",")}{" "}
+                      {unitLabel(x.unit, x.qty)} × {eur(x.unitPrice)}
+                    </span>
+                  )}
                 </span>
-                <span className="font-medium">
-                  {x.price > 0 ? eur(x.price) : "su preventivo"}
+                <span className="font-medium whitespace-nowrap">
+                  {x.unitPrice > 0 ? eur(x.subtotal) : "su preventivo"}
                 </span>
               </div>
             ))}
             {dolceChoice && (
               <div className="flex justify-between">
-                <span className="text-gray-600">Dolce: {dolceChoice}</span>
-                <span className="font-medium">
-                  {dolcePrice === null ? "€35/kg (peso da definire)" : dolcePrice > 0 ? eur(dolcePrice) : "—"}
+                <span className="text-gray-600">
+                  Dolce: {dolceChoice}
+                  {selectedDolce?.needsDetails && dolceKgNum > 0 && (
+                    <span className="text-gray-500">
+                      {" "}
+                      — {dolceKg.replace(".", ",")} kg × €35
+                    </span>
+                  )}
+                </span>
+                <span className="font-medium whitespace-nowrap">
+                  {dolcePrice === null
+                    ? "indica i kg"
+                    : dolcePrice > 0
+                      ? eur(dolcePrice)
+                      : "—"}
                 </span>
               </div>
             )}
-            <div className="flex justify-between pt-2 mt-2 border-t font-bold text-base" style={{ color: "#2B2B6B" }}>
-              <span>Totale stimato{hasQuoteOnly || dolcePrice === null ? " (parziale)" : ""}</span>
-              <span>{eur(total)}</span>
-            </div>
+            {tortaDoppia && (
+              <p className="text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-md p-2 mt-1">
+                ⚠️ Attenzione: hai indicato una torta sia nel <b>Dolce</b> sia
+                nei <b>Servizi</b>. Se è la stessa torta, togline una — altrimenti
+                la stai contando due volte.
+              </p>
+            )}
+            {prezzoCongelato === null ? (
+              <div
+                className="flex justify-between pt-2 mt-2 border-t font-bold text-base"
+                style={{ color: "#2B2B6B" }}
+              >
+                <span>
+                  Totale stimato
+                  {hasQuoteOnly || dolcePrice === null ? " (parziale)" : ""}
+                </span>
+                <span>{eur(totaleStimato)}</span>
+              </div>
+            ) : (
+              <>
+                {/* La festa è confermata: vale il prezzo concordato col genitore,
+                    non quello che verrebbe fuori dal listino di oggi. */}
+                <div className="flex justify-between text-gray-500 pt-2 mt-2 border-t">
+                  <span>Totale a listino di oggi</span>
+                  <span>{eur(totaleStimato)}</span>
+                </div>
+                <div
+                  className="flex justify-between font-bold text-base"
+                  style={{ color: "#2B2B6B" }}
+                >
+                  <span>🔒 Prezzo concordato</span>
+                  <span>{eur(prezzoCongelato)}</span>
+                </div>
+                {congelatoIl && (
+                  <p className="text-xs text-gray-400">
+                    Bloccato il{" "}
+                    {congelatoIl.toLocaleDateString("it-IT", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                    . Ritoccare il listino non cambia questa festa.
+                  </p>
+                )}
+                {righeCongelate.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-gray-500 hover:text-gray-700 py-1">
+                      Vedi il dettaglio concordato
+                    </summary>
+                    <div className="mt-1 pl-2 border-l-2 space-y-1 py-1" style={{ borderColor: "#E5D9BF" }}>
+                      {righeCongelate.map((r: any, i: number) => (
+                        <div key={i} className="flex justify-between text-gray-600">
+                          <span>{r.descrizione}</span>
+                          <span className="font-medium whitespace-nowrap">
+                            {eur(Number(r.subtotale))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+                {prezzoDaAggiornare && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-md p-2.5 mt-1.5">
+                    <p className="text-xs text-amber-900">
+                      La festa è cambiata dopo la conferma: a listino di oggi
+                      farebbe <b>{eur(totaleStimato)}</b>, cioè{" "}
+                      <b>
+                        {scostamento > 0 ? "+" : "−"}
+                        {eur(Math.abs(scostamento))}
+                      </b>{" "}
+                      rispetto al prezzo concordato.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleRefreeze}
+                      disabled={saving}
+                      className="mt-2 px-3 py-1.5 text-xs font-medium rounded-md text-white disabled:opacity-50"
+                      style={{ backgroundColor: "#2B2B6B" }}
+                    >
+                      Aggiorna il prezzo concordato a {eur(totaleStimato)}
+                    </button>
+                    <p className="text-[11px] text-amber-700 mt-1.5">
+                      Fallo solo se hai ri-concordato il prezzo col genitore.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
             {deposit > 0 && (
               <>
                 <div className="flex justify-between text-gray-600">
@@ -748,8 +1267,24 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
                 </div>
               </>
             )}
+            {guests === 0 && (
+              <p className="text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-md p-2 mt-1">
+                ⚠️ Non hai ancora indicato il numero di bambini: eventuali
+                invitati extra (oltre {baseGuests}) non sono conteggiati.
+              </p>
+            )}
+            {accontoIncompleto && (
+              <p className="text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-md p-2 mt-1">
+                ⚠️ Hai segnato l&apos;acconto come ricevuto ma manca{" "}
+                {!String(formData.depositAmount ?? "").trim() ? "l'importo" : ""}
+                {!String(formData.depositAmount ?? "").trim() && !formData.depositMethod ? " e " : ""}
+                {!formData.depositMethod ? "il metodo (contanti/bonifico)" : ""}.
+                Senza questi dati il saldo non torna.
+              </p>
+            )}
             <p className="text-xs text-gray-400 pt-2">
-              Stima indicativa: prezzo weekend applicato a sabati, domeniche e festivi nazionali; torta al kg e voci su preventivo da definire a parte.
+              Prezzo weekend applicato a sabati, domeniche e festivi nazionali.
+              Le voci &quot;su preventivo&quot; restano da concordare.
             </p>
           </div>
         </section>
@@ -852,6 +1387,49 @@ export function PartyForm({ party, packages, services }: PartyFormProps) {
           >
             Annulla festa
           </button>
+        )}
+      </div>
+
+      {/* Spazio per non far coprire l'ultimo contenuto dalla barra fissa */}
+      <div className="h-24 md:hidden" aria-hidden="true" />
+
+      {/* ===== BARRA FISSA: totale sempre visibile + salva a portata di pollice =====
+          Su telefono il form è lungo: senza questa barra bisogna scorrere fino
+          in fondo per vedere quanto costa e per salvare. */}
+      <div
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t shadow-[0_-2px_10px_rgba(0,0,0,0.12)] px-4 py-3"
+        style={{ backgroundColor: "#FFFFFF", borderColor: "#E5D9BF" }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] uppercase tracking-wide text-gray-500">
+              Totale{hasQuoteOnly || dolcePrice === null ? " parziale" : ""}
+            </div>
+            <div
+              className="text-xl font-bold leading-tight"
+              style={{ color: "#2B2B6B" }}
+            >
+              {selectedPackage ? eur(total) : "—"}
+              {deposit > 0 && (
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  saldo {eur(balance)}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-5 py-3 text-white rounded-lg font-semibold disabled:opacity-50 whitespace-nowrap"
+            style={{ backgroundColor: puoSalvare ? "#2B2B6B" : "#9CA3AF" }}
+          >
+            {saving ? "Salvo..." : isNew ? "Crea festa" : "Salva"}
+          </button>
+        </div>
+        {!puoSalvare && (
+          <p className="text-[11px] text-amber-700 mt-1.5 truncate">
+            Manca {campiMancanti.join(", ")}
+          </p>
         )}
       </div>
     </form>

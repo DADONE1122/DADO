@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth-helpers"
+import { serviceLabel } from "@/lib/unita"
 
 export const dynamic = "force-dynamic"
 
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
       package: { select: { name: true } },
       additionalServices: {
         include: {
-          service: { select: { name: true } },
+          service: { select: { name: true, unit: true, price: true } },
           option: { select: { name: true } },
         },
       },
@@ -46,9 +47,16 @@ export async function GET(request: NextRequest) {
   const header = [
     "Data", "Slot", "Festeggiato", "Età", "Genitore", "Telefono",
     "Pacchetto", "Ospiti stimati", "Servizi", "Dolce",
+    "Prezzo concordato", "Saldo da incassare",
     "Acconto ricevuto", "Importo acconto", "Metodo acconto",
     "Stato", "Note interne",
   ].join(";")
+
+  // Importo in formato italiano (virgola decimale) per Excel IT
+  const eur = (v: any) =>
+    v === null || v === undefined
+      ? ""
+      : Number(v).toFixed(2).replace(".", ",")
 
   const rows = parties.map((p) =>
     [
@@ -60,14 +68,13 @@ export async function GET(request: NextRequest) {
       esc(p.parentPhone),
       esc(p.package.name),
       p.estimatedGuests,
-      esc(
-        p.additionalServices
-          .map((ps) =>
-            ps.option ? `${ps.service.name}: ${ps.option.name}` : ps.service.name
-          )
-          .join(" + ")
-      ),
+      esc(p.additionalServices.map((ps) => serviceLabel(ps as any)).join(" + ")),
       esc(p.cake || ""),
+      // Prezzo concordato: vuoto se la festa non è ancora stata confermata
+      eur(p.totalAmount),
+      p.totalAmount !== null && p.totalAmount !== undefined
+        ? eur(Number(p.totalAmount) - Number(p.depositAmount ?? 0))
+        : "",
       p.depositReceived ? "Sì" : "No",
       p.depositAmount ? Number(p.depositAmount).toFixed(2).replace(".", ",") : "",
       p.depositMethod === "CASH" ? "Contanti" : p.depositMethod === "BANK_TRANSFER" ? "Bonifico" : "",

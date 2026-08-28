@@ -189,6 +189,15 @@ export default async function HomePage() {
           <p className="text-xs text-gray-400 mt-4">
             Pito Pitù © {new Date().getFullYear()}
           </p>
+          {/* Ingresso al gestionale. Discreto: i genitori non devono
+              confondersi, ma dal telefono ci si arriva senza doversi
+              ricordare l'indirizzo. */}
+          <a
+            href="/dashboard"
+            className="relative z-10 inline-block mt-3 text-xs text-gray-400 underline underline-offset-2 hover:text-gray-600"
+          >
+            Area riservata
+          </a>
         </footer>
       </main>
 

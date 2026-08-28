@@ -26,7 +26,9 @@ export default async function NuovaFestaPage() {
   const emptyParty = {
     date: "",
     slot: "AFTERNOON",
-    packageId: packages[0]?.id ?? "",
+    // Nessun pacchetto preselezionato: dev'essere una scelta esplicita,
+    // altrimenti si rischia di salvare una FULL come FAI DA TE.
+    packageId: "",
     estimatedGuests: "",
     depositReceived: false,
     depositAmount: "",

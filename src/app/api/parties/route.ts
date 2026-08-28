@@ -52,14 +52,35 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { date, slot } = body
 
-  if (!date || !slot) {
+  // Validazione esplicita: meglio un messaggio chiaro che un 500 generico.
+  const mancanti: string[] = []
+  if (!date) mancanti.push("data")
+  if (!slot) mancanti.push("slot")
+  if (!body.packageId) mancanti.push("pacchetto")
+  if (!String(body.celebrationName ?? "").trim())
+    mancanti.push("nome del festeggiato")
+  if (!String(body.parentName ?? "").trim()) mancanti.push("nome del genitore")
+  if (!String(body.parentPhone ?? "").trim())
+    mancanti.push("telefono del genitore")
+
+  const guests = parseInt(body.estimatedGuests)
+  if (!Number.isFinite(guests) || guests <= 0) mancanti.push("numero di bambini")
+
+  const age = parseInt(body.age)
+  if (!Number.isFinite(age) || age < 0) mancanti.push("età del festeggiato")
+
+  if (mancanti.length > 0) {
     return NextResponse.json(
-      { error: "Data e slot sono obbligatori" },
+      { error: `Dati mancanti o non validi: ${mancanti.join(", ")}` },
       { status: 400 }
     )
   }
 
   const partyDate = new Date(date)
+  if (isNaN(partyDate.getTime())) {
+    return NextResponse.json({ error: "Data non valida" }, { status: 400 })
+  }
+
   const selections = normalizeSelections(body)
 
   try {
@@ -73,11 +94,11 @@ export async function POST(request: NextRequest) {
           parentName: body.parentName,
           parentPhone: body.parentPhone,
           celebrationName: body.celebrationName,
-          age: parseInt(body.age),
+          age,
           date: partyDate,
           slot: slot as any,
           packageId: body.packageId,
-          estimatedGuests: parseInt(body.estimatedGuests),
+          estimatedGuests: guests,
           depositReceived: body.depositReceived || false,
           depositAmount: body.depositAmount ? parseFloat(body.depositAmount) : null,
           depositMethod: body.depositMethod || null,

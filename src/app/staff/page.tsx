@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { PrintButton } from "@/components/print-button"
+import { serviceLabel } from "@/lib/unita"
 
 export const dynamic = "force-dynamic"
 
@@ -108,7 +109,8 @@ export default async function StaffPage({
       package: { select: { name: true } },
       additionalServices: {
         include: {
-          service: { select: { name: true } },
+          // `unit` serve per mostrare la quantità (8 persone, 2 kg...)
+          service: { select: { name: true, unit: true } },
           option: { select: { name: true } },
         },
       },
@@ -131,9 +133,9 @@ export default async function StaffPage({
         decorationTheme: party.decorationTheme,
         specialRequests: party.specialRequests,
         status: party.status,
-        services: party.additionalServices.map((ps: any) =>
-          ps.option ? `${ps.service.name}: ${ps.option.name}` : ps.service.name
-        ),
+        // La quantità è essenziale per chi prepara: "Giropizza adulti" da solo
+        // non dice se sono 2 o 12 persone.
+        services: party.additionalServices.map((ps: any) => serviceLabel(ps)),
       })
     }
   }

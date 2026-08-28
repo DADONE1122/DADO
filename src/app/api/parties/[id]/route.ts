@@ -7,6 +7,7 @@ import {
   assertOptionsAvailable,
   replacePartyServices,
 } from "@/lib/service-selections"
+import { preventivoDaFesta, prezzoDolce } from "@/lib/prezzi"
 
 // GET /api/parties/[id]
 export async function GET(
@@ -137,6 +138,37 @@ export async function PUT(
       })
       if (selections) {
         await replacePartyServices(tx, params.id, selections)
+      }
+
+      // ── Congelamento del prezzo concordato ───────────────────────────────
+      // Si congela quando la festa viene confermata (COMPLETE), oppure quando
+      // si chiede esplicitamente di aggiornare il prezzo pattuito (es. il
+      // genitore aggiunge un servizio dopo la conferma).
+      // Da quel momento un ritocco al listino non tocca più questa festa.
+      const daCongelare =
+        body.status === "COMPLETE" || body.refreezePrice === true
+      if (daCongelare) {
+        const aggiornata = await tx.party.findUnique({
+          where: { id: params.id },
+          include: {
+            package: true,
+            additionalServices: { include: { service: true, option: true } },
+          },
+        })
+        if (aggiornata) {
+          const preventivo = preventivoDaFesta(
+            aggiornata,
+            prezzoDolce(aggiornata.cake)
+          )
+          await tx.party.update({
+            where: { id: params.id },
+            data: {
+              totalAmount: preventivo.totale,
+              priceBreakdown: preventivo as any,
+              pricesFrozenAt: new Date(),
+            },
+          })
+        }
       }
     })
   } catch (error: any) {

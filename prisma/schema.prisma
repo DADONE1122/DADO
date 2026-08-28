@@ -98,6 +98,15 @@ model Party {
   depositMethod   DepositMethod? @map("deposit_method")
   status          PartyStatus   @default(PENDING_DETAILS)
 
+  // ── Prezzo concordato (congelato) ────────────────────────────────────────
+  // Quando la festa viene confermata si salva qui il prezzo pattuito col
+  // genitore. Da quel momento un ritocco al listino NON cambia più il prezzo
+  // di questa festa. Se sono null la festa mostra una stima calcolata sul
+  // listino corrente (comportamento delle feste create prima di questa modifica).
+  totalAmount      Decimal?  @map("total_amount") @db.Decimal(10, 2)
+  priceBreakdown   Json?     @map("price_breakdown") // righe del preventivo come concordate
+  pricesFrozenAt   DateTime? @map("prices_frozen_at")
+
   // Party details group
   cake             String?
   internalNotes    String?  @map("internal_notes") // note interne, solo titolari
@@ -111,6 +120,11 @@ model Party {
   package         Package        @relation(fields: [packageId], references: [id])
   additionalServices PartyService[]
 
+  // Le query più frequenti sono per data (calendario, capienza slot),
+  // per stato (solleciti, filtri) e per telefono (cliente abituale).
+  @@index([date, slot])
+  @@index([status])
+  @@index([parentPhone])
   @@map("parties")
 }
 
@@ -137,14 +151,44 @@ model AdditionalService {
   price           Decimal  @db.Decimal(10, 2)
   category        String?  // Cibo, Bevande, Torte e dolci, Allestimenti, Extra
   priceNote       String?  @map("price_note") // es. "al kg", "min. 20 pezzi", "da concordare"
+  // Unità di misura del prezzo: null = prezzo fisso.
+  // Se valorizzato ("persona", "kg", "pezzo", "tavolo", "bottiglia"...) in
+  // prenotazione viene chiesta la quantità e il totale è prezzo × quantità.
+  unit            String?
   hasOptions      Boolean  @default(false) @map("has_options")
   exclusivePerDay Boolean  @default(false) @map("exclusive_per_day")
+
+  // Chiede un appunto libero quando il servizio viene scelto
+  // (es. gusto della farcitura, testo del topper, tema dei palloncini).
+  needsNote       Boolean  @default(false) @map("needs_note")
+  noteLabel       String?  @map("note_label") // cosa chiedere, es. "Gusto"
+
+  // Voce figlia: compare rientrata sotto il servizio padre e si può
+  // spuntare solo se il padre è selezionato (es. Farcitura sotto Pizza famiglia).
+  parentServiceId String?  @map("parent_service_id")
+
+  // Spuntato in automatico e non togglabile quando la festa usa questo
+  // pacchetto (es. Pulizia finale obbligatoria con FAI DA TE).
+  mandatoryForPackageId String? @map("mandatory_for_package_id")
+
+  // Quando il dolce è "La porto io", almeno uno dei servizi con questo flag
+  // dev'essere selezionato (diritto di sbarco torta / panino esterno).
+  requiredIfCakeExternal Boolean @default(false) @map("required_if_cake_external")
+
+  // Mostrato accanto alla scelta del pacchetto invece che nella lista dei
+  // servizi: riguarda la festa in sé, non è un extra (es. Festa condivisa).
+  showWithPackage Boolean @default(false) @map("show_with_package")
+
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   options  ServiceOption[]
   parties  PartyService[]
+
+  parentService AdditionalService?  @relation("ServizioFiglio", fields: [parentServiceId], references: [id])
+  childServices AdditionalService[] @relation("ServizioFiglio")
+
   @@map("additional_services")
 }
 
@@ -164,6 +208,12 @@ model PartyService {
   partyId   String  @map("party_id")
   serviceId String  @map("service_id")
   optionId  String? @map("option_id")
+  // Quantità per i servizi a unità (30 paninetti, 2.5 kg di pasticcini...).
+  // Resta 1 per i servizi a prezzo fisso.
+  quantity  Decimal @default(1) @db.Decimal(10, 2)
+  // Appunto libero per i servizi che lo richiedono (gusto della farcitura,
+  // testo del topper, tema dei palloncini...).
+  note      String?
 
   party   Party             @relation(fields: [partyId], references: [id], onDelete: Cascade)
   service AdditionalService @relation(fields: [serviceId], references: [id])

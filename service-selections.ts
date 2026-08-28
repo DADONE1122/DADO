@@ -1,26 +1,10 @@
 // Helpers for party service selections with per-day exclusive options
 // (e.g. "Sfondo fotografico: Unicorni" can be used by only one party per date).
 
-export type ServiceSelection = {
-  serviceId: string
-  optionId?: string | null
-  quantity?: number
-  note?: string | null
-}
+export type ServiceSelection = { serviceId: string; optionId?: string | null }
 
-// Quantità valida: numero positivo, max 2 decimali (per i kg di torta), con
-// tetto di sicurezza. Qualsiasi valore non valido torna a 1.
-export function safeQuantity(raw: any): number {
-  const n =
-    typeof raw === "number"
-      ? raw
-      : parseFloat(String(raw ?? "").replace(",", "."))
-  if (!isFinite(n) || n <= 0) return 1
-  return Math.min(Math.round(n * 100) / 100, 999)
-}
-
-// Accepts either body.serviceSelections ([{serviceId, optionId, quantity}]) or
-// the legacy body.serviceIds (string[]) and returns a normalized list.
+// Accepts either body.serviceSelections ([{serviceId, optionId}]) or the
+// legacy body.serviceIds (string[]) and returns a normalized list.
 export function normalizeSelections(body: any): ServiceSelection[] {
   if (Array.isArray(body.serviceSelections)) {
     return body.serviceSelections
@@ -28,14 +12,12 @@ export function normalizeSelections(body: any): ServiceSelection[] {
       .map((s: any) => ({
         serviceId: String(s.serviceId),
         optionId: s.optionId ? String(s.optionId) : null,
-        quantity: safeQuantity(s.quantity),
-        note: s.note ? String(s.note).slice(0, 500) : null,
       }))
   }
   if (Array.isArray(body.serviceIds)) {
     return body.serviceIds
       .filter(Boolean)
-      .map((id: any) => ({ serviceId: String(id), optionId: null, quantity: 1, note: null }))
+      .map((id: any) => ({ serviceId: String(id), optionId: null }))
   }
   return []
 }
@@ -85,8 +67,6 @@ export async function createPartyServices(
         partyId,
         serviceId: sel.serviceId,
         optionId: sel.optionId || null,
-        quantity: safeQuantity(sel.quantity),
-        note: sel.note || null,
       },
     })
   }
